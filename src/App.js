@@ -1,24 +1,33 @@
-import logo from './logo.svg';
-import './App.css';
+import React from 'react';
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import Sidebar from './components/Sidebar';
+import Home from './components/Home';
+import Graph from './components/Graph';
+import './index.css';
+import { AuthProvider } from './context/AuthContext';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <AuthProvider>
+      <Router>
+        <div className="container-fluid">
+          <div className="row">
+            {/* Sidebar */}
+            <div className="col-md-3 col-lg-2 bg-dark text-white min-vh-100">
+              <Sidebar />
+            </div>
+            
+            {/* Main Content */}
+            <div className="col-md-9 col-lg-10 p-4">
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/graph" element={<Graph />} />
+              </Routes>
+            </div>
+          </div>
+        </div>
+      </Router>
+    </AuthProvider>
   );
 }
 

@@ -36,3 +36,16 @@
     transform: rotate(360deg);
   }
 }
+
+/* Main container with flex layout */
+.app-container {
+  display: flex;
+  height: 100vh; /* Full viewport height */
+}
+
+/* Main content area */
+.main-content {
+  flex: 1; /* Expands to take up remaining space */
+  padding: 20px;
+  box-sizing: border-box;
+}
