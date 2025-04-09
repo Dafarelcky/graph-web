@@ -69,7 +69,14 @@ const ProductTable = () => {
             {products.map((product, index) => (
               <tr key={index} className="border-b">
                 <td className="p-2">{product.id_halal}</td>
-                <td className="p-2">{product.nama_produk}</td>
+                <td className="p-2">
+                  <a 
+                    href={`/${product.id_halal}`}
+                    className="text-blue-500 hover:underline"
+                  >
+                    {product.nama_produk}
+                  </a>
+                </td>
                 <td className="p-2">{product.nama_perusahaan}</td>
                 <td className="p-2">{product.jenis_usaha}</td>
                 <td className="p-2">{product.diperbarui_pada}</td>
