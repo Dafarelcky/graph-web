@@ -5,6 +5,42 @@ import axios from 'axios';
 const ProductTable = () => {
   const { token } = useAuth();
   const [products, setProducts] = useState([]);
+  const [perusahaan, setPerusahaan] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (token) {
+        try {
+          const response = await axios.get('https://riset.its.ac.id/teratai-dev/api/v1/perusahaan', {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+  
+          const allCompanies = response.data.result.perusahaan;
+  
+          // ✅ Filter and map pembina companies
+          const pembinaCompanies = allCompanies
+            .filter(company => company.jenis_usaha?.toLowerCase() === 'pembina')
+            .map(company => ({
+              _id: company._id,
+              nama_perusahaan: company.nama_perusahaan,
+              jenis_usaha: company.jenis_usaha,
+            }));
+  
+          console.log("📦 Pembina Companies:", pembinaCompanies);
+  
+          // Optional: store in state
+          setPerusahaan(pembinaCompanies); // or use a new state like setPembinaPerusahaan if needed
+  
+        } catch (error) {
+          console.error('Failed to fetch data:', error);
+        }
+      }
+    };
+  
+    fetchData();
+  }, [token]);
 
   useEffect(() => {
     // console.log('Token:', token);
@@ -16,7 +52,7 @@ const ProductTable = () => {
               Authorization: `Bearer ${token}`,
             },
           });
-          console.log('Data fetched successfully:', response.data.result.produkMaster);
+          // console.log('Data fetched successfully:', response.data.result.produkMaster);
           setProducts(response.data.result.produkMaster);
         } catch (error) {
           console.error('Failed to fetch data:', error);

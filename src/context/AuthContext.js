@@ -10,8 +10,8 @@ export const AuthProvider = ({ children }) => {
     const autoLogin = async () => {
       try {
         const params = new URLSearchParams(); 
-        params.append('email', 'teraabadi@gmail.com'); 
-        params.append('password', 'teraabadi');
+        params.append('email', 'superadmin@gmail.com'); 
+        params.append('password', 'superadmin');
 
         const response = await axios.post('https://riset.its.ac.id/teratai-dev/api/v1/login', params, {
             headers: {
