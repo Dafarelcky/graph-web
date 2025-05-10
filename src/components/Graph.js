@@ -14,6 +14,16 @@ function Graph() {
   const [cyInstance, setCyInstance] = useState(null);
   const [graphKey, setGraphKey] = useState(0);
   const [perusahaanMap, setPerusahaanMap] = useState({});
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [hoveredCategory, setHoveredCategory] = useState('');
+  const [filteredIngredientList, setFilteredIngredientList] = useState([]);
+  const [isHoveringDropdown, setIsHoveringDropdown] = useState(false);
+  const [isDropdownVisible, setIsDropdownVisible] = useState(false);
+  const [activeCategory, setActiveCategory] = useState(null); // optional, for future use
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
     // console.log('Token:', token);
@@ -64,7 +74,7 @@ function Graph() {
 
           const companyMap = {};
           allCompanies.forEach(c => {
-            companyMap[c.nama_perusahaan] = c;
+            companyMap[c._id] = c;
           });
           setPerusahaanMap(companyMap);
   
@@ -84,6 +94,7 @@ function Graph() {
       const password = 'bzhbf8q5fbkqb-bjhefb90yfebjh-7hjebfq3745i';
       const resultDict = {};
       const product_ingredient = {};
+      setIsLoading(true);
   
       for (const product of products) {
         try {
@@ -108,12 +119,15 @@ function Graph() {
           // Store the array in the dictionary using id_halal as the key
           const dataArray = Object.values(data);
 
-          if (dataArray[0]?.bahan?.[0]?.nama_bahan) {
-            product_ingredient[product.nama_produk] = dataArray[0].bahan[0].nama_bahan;
+          const allBahan = dataArray[0]?.bahan?.map(b => b.nama_bahan).filter(Boolean);
+          if (allBahan?.length) {
+            product_ingredient[product.id_halal] = allBahan;
           }
-          resultDict[product.nama_produk] = {
+          resultDict[product.id_halal] = {
             track: extracted,
+            nama_produk: product.nama_produk,
             id_pembina: product.id_pembina,
+            id_perusahaan: product.id_perusahaan,
             jenis_perusahaan: product.jenis_perusahaan,
             provinsi: product.provinsi,
             kota: product.kota,
@@ -125,11 +139,12 @@ function Graph() {
           // console.log(data)
   
         } catch (error) {
-          console.error(`❌ Error fetching for ${product.nama_produk}:`, error.response?.status || error.message);
+          console.error(`❌ Error fetching for ${product.id_halal}:`, error.response?.status || error.message);
         }
       }
       setProductIngredientMap(product_ingredient);
       setRaws(resultDict);
+      setIsLoading(false); 
     };
   
     if (products.length > 0) {
@@ -137,12 +152,55 @@ function Graph() {
     }
   }, [products]);
 
+  const categorizedIngredients = useMemo(() => {
+    const categoryKeywords = {
+      "Daging Ayam": ["Ayam", "Dada", "Karkas Ayam", "Broiler"],
+      "Daging Sapi": ["Sapi", "Iga", "Boneless"],
+      "Daging Kerbau": ["Kerbau"],
+      "Jeroan": ["Jeroan"],
+      "Beras": ["Beras"],
+      "Mie / Bihun": ["Mie", "BIHUN", "Bihun"],
+      "Olahan": ["Bakso", "Mojo", "Segar"],
+      "Unggas Lain": ["Unggas"],
+    };
+
+    const ingredientSet = new Set(Object.values(productIngredientMap).flat());
+    const categorized = {};
+
+    for (const ingredient of ingredientSet) {
+      let matched = false;
+
+      for (const [category, keywords] of Object.entries(categoryKeywords)) {
+        for (const keyword of keywords) {
+          if (ingredient.toLowerCase().includes(keyword.toLowerCase())) {
+            if (!categorized[category]) categorized[category] = new Set();
+            categorized[category].add(ingredient);
+            matched = true;
+          }
+        }
+      }
+
+      if (!matched) {
+        if (!categorized["Lainnya"]) categorized["Lainnya"] = new Set();
+        categorized["Lainnya"].add(ingredient);
+      }
+    }
+
+    // Convert Sets to arrays and sort
+    const final = {};
+    for (const [category, ingredients] of Object.entries(categorized)) {
+      final[category] = Array.from(ingredients).sort();
+    }
+
+    return final;
+  }, [productIngredientMap]);
+
   const generateElements = (data) => {
     const elements = [];
     const addedNodes = new Set();
   
-    for (const productName in data) {
-      const chain = data[productName];
+    for (const productID in data) {
+      const chain = data[productID];
   
       if (!chain || chain.length === 0) continue;
   
@@ -150,62 +208,109 @@ function Graph() {
       const rest = chain.slice(1);
   
       // Add node: "Tera Abadi"
-      if (!addedNodes.has(source)) {
-        elements.push({ data: { id: source, label: source }, classes: 'entity' });
-        addedNodes.add(source);
+      if (!addedNodes.has(raws[productID].id_perusahaan)) {
+        const perusahaanInfo = perusahaanMap[raws[productID].id_perusahaan];
+        const isPelaku = perusahaanInfo?.jenis_usaha?.toLowerCase() === 'pelaku_usaha';
+        elements.push({
+          data: { id: raws[productID].id_perusahaan, label: source },
+          classes: isPelaku ? 'entity pelaku' : 'entity'
+        });
+        addedNodes.add(raws[productID].id_perusahaan);
       }
   
       // Add product node
-      if (!addedNodes.has(productName)) {
-        elements.push({ data: { id: productName, label: productName }, classes: 'product' });
-        addedNodes.add(productName);
+      if (!addedNodes.has(productID)) {
+        elements.push({ data: { id: productID, label: raws[productID].nama_produk }, classes: 'product' });
+        addedNodes.add(productID);
       }
   
       // Edge: Tera Abadi → Product
       elements.push({
         data: {
-          id: `${source}_${productName}`,
-          source: source,
-          target: productName,
+          id: `${raws[productID].id_perusahaan}_${productID}`,
+          source: raws[productID].id_perusahaan,
+          target: productID,
         },
       });
   
       // Continue the chain: product → next → next → ...
-      let prev = productName;
-      for (const current of rest) {
-        if (!addedNodes.has(current)) {
-          elements.push({ data: { id: current, label: current }, classes: 'entity' });
-          addedNodes.add(current);
+      let prev = productID;
+      for (const currentName of rest) {
+        // Find the perusahaan by name
+        const currentEntry = Object.values(perusahaanMap).find(c => c.nama_perusahaan === currentName);
+        const currentID = currentEntry?._id || `juru_sembelih_${currentName}`; // fallback
+
+        if (!addedNodes.has(currentID)) {
+          elements.push({ data: { id: currentID, label: currentName }, classes: 'entity' });
+          addedNodes.add(currentID);
         }
-  
+
         elements.push({
           data: {
-            id: `${prev}_${current}`,
+            id: `${prev}_${currentID}`,
             source: prev,
-            target: current,
+            target: currentID,
           },
         });
-  
-        prev = current;
+
+        prev = currentID;
       }
     }
   
     return elements;
   };  
 
+  const filteredCategories = useMemo(() => {
+    if (!searchTerm) return Object.entries(categorizedIngredients);
+    return Object.entries(categorizedIngredients).filter(([category]) =>
+      category.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [searchTerm, categorizedIngredients]);
+
   const filteredRaws = useMemo(() => {
     const filtered = {};
-    for (const [productName, productData] of Object.entries(raws)) {
-      const matchesIngredient = !selectedIngredient || productIngredientMap[productName] === selectedIngredient;
-      const matchesPembina = !selectedPembina || productData.id_pembina === selectedPembina;
+  
+    for (const [productID, productData] of Object.entries(raws)) {
+      let matchesIngredient = false;
+        if (filteredIngredientList.length > 0) {
+          matchesIngredient = productIngredientMap[productID]?.some(ing => filteredIngredientList.includes(ing));
+        } else if (selectedIngredient) {
+          matchesIngredient = productIngredientMap[productID]?.includes(selectedIngredient);
+        } else {
+          matchesIngredient = true;
+        }
 
-      if (matchesIngredient && matchesPembina) {
-        filtered[productName] = productData.track;
+      const matchesPembina = !selectedPembina || productData.id_pembina === selectedPembina;
+  
+      const updatedAt = productData.diperbarui_pada;
+      const updatedDate = updatedAt ? new Date(updatedAt) : null;
+      const inDateRange =
+        (!startDate || (updatedDate && updatedDate >= new Date(startDate))) &&
+        (!endDate || (updatedDate && updatedDate <= new Date(endDate)));
+  
+      if (matchesIngredient && matchesPembina && inDateRange) {
+        filtered[productID] = productData.track;
       }
     }
   
     return filtered;
-  }, [selectedIngredient, selectedPembina, raws, productIngredientMap]);
+  }, [selectedIngredient, selectedPembina, raws, productIngredientMap, startDate, endDate]);  
+
+  useEffect(() => {
+    setHoveredCategory(null);
+    setIsDropdownVisible(searchTerm.trim().length > 0);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsDropdownVisible(false);
+        setHoveredCategory(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const cyRef = useRef(null);
   const [selectedNode, setSelectedNode] = useState(null);
@@ -213,22 +318,20 @@ function Graph() {
   const layoutInitialized = useRef(false);
 
   useEffect(() => {
-    if (Object.keys(filteredRaws).length > 0) {
-      const els = generateElements(filteredRaws);
-      setElements(els);
-      setGraphKey(prev => prev + 1); // 💥 force remount
-    }
+    const els = generateElements(filteredRaws);
+    setElements(els);
+    setGraphKey(prev => prev + 1); // remount
   }, [filteredRaws]);
 
   useEffect(() => {
     if (cyInstance && elements.length > 0) {
       const layout = cyInstance.layout({
         name: 'breadthfirst',
+        spacingFactor: 1.8, // more spacing between nodes
+        directed: true,
         animate: true,
         animationDuration: 500,
         animationEasing: 'ease-in-out',
-        spacingFactor: 1.5,
-        directed: true,
       });
   
       try {
@@ -272,13 +375,15 @@ function Graph() {
           if (product?.track) {
             const track = product.track;
             let prev = nodeId;
-        
+
             for (let i = 1; i < track.length; i++) {
-              const current = track[i];
-              const edgeId = `${prev}_${current}`;
+              const currentName = track[i];
+              const currentEntry = Object.values(perusahaanMap).find(c => c.nama_perusahaan === currentName);
+              const currentID = currentEntry?._id || `juru_sembelih_${currentName}`;
+              const edgeId = `${prev}_${currentID}`;
               const edge = cy.getElementById(edgeId);
               if (edge) edge.addClass('highlighted');
-              prev = current;
+              prev = currentID;
             }
           } else {
             // Try to backtrack from clicked node (reverse path)
@@ -302,6 +407,7 @@ function Graph() {
                   provinsi: product?.provinsi || null,
                   kota: product?.kota || null,
                   tanggal_diperbarui: product?.diperbarui_pada || company?.diperbarui_pada,
+                  bahan: productIngredientMap[nodeId] || [],
                 }
               : null,
           });
@@ -335,10 +441,14 @@ function Graph() {
         {
           selector: 'edge',
           style: {
-            width: 3,
-            lineColor: '#A9A9A9',
-            targetArrowColor: '#A9A9A9',
+            width: 2,
+            lineColor: '#999',
+            curveStyle: 'bezier', // 🧠 allow for curved arrows
             targetArrowShape: 'triangle',
+            targetArrowColor: '#999',
+            arrowScale: 1.5, // 🆙 make arrows larger
+            midTargetArrowShape: 'none',
+            sourceArrowShape: 'none',
           },
         },
         {
@@ -354,36 +464,142 @@ function Graph() {
           },
         },
         {
+          selector: 'node.pelaku',
+          style: {
+            backgroundColor: '#FF851B', // orange
+          },
+        },
+        {
           selector: 'edge.highlighted',
           style: {
-            lineColor: '#FF4136', // red
+            lineColor: '#FF4136',
             targetArrowColor: '#FF4136',
+            targetArrowShape: 'triangle',
+            arrowScale: 2, // more prominent on highlight
             width: 4,
+            curveStyle: 'bezier',
           },
-        }        
+        },     
       ]}
     />
-  ), [elements, graphKey, raws]);  
+  ), [elements, graphKey, raws, perusahaanMap, productIngredientMap]);  
 
+  const hoverTimeout = useRef(null);
   return (
     <div className="App">
       <h1>Cytoscape.js with React</h1>
-      <div style={{ marginBottom: '20px' }}>
-        <label htmlFor="ingredient-select">Filter:</label>
-        <select
-          id="ingredient-select"
-          onChange={(e) => setSelectedIngredient(e.target.value)}
-          value={selectedIngredient}
-          style={{ marginLeft: '10px', padding: '5px' }}
-        >
-          <option value="">All Ingredients</option>
-          {Array.from(new Set(Object.values(productIngredientMap))).map((ingredient) => (
-            <option key={ingredient} value={ingredient}>
-              {ingredient}
-            </option>
-          ))}
-        </select>
+      <div style={{ position: 'relative', marginBottom: '20px' }}>
+        <label htmlFor="ingredient-search">Filter by Category or Ingredient:</label>
+        <input
+          id="ingredient-search"
+          type="text"
+          placeholder="Search category..."
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setHoveredCategory(null);         // ensures clean reset
+            setIsDropdownVisible(true);       // dropdown is visible on typing
+            setFilteredIngredientList([]);    // clear previous category filter
+          }}
+          style={{ marginLeft: '10px', padding: '5px', width: '250px' }}
+        />
+        {isDropdownVisible && (
+          <div
+            ref={dropdownRef}
+            onMouseEnter={() => {
+              clearTimeout(hoverTimeout.current);
+              setIsHoveringDropdown(true);
+            }}
+            onMouseLeave={() => {
+              hoverTimeout.current = setTimeout(() => {
+                setIsHoveringDropdown(false);
+                setHoveredCategory(null);
+              }, 200);
+            }}
+            style={{
+              position: 'absolute',
+              top: '40px',
+              left: 0,
+              display: 'flex',
+              zIndex: 1000,
+              background: '#fff',
+              border: '1px solid #ccc',
+              borderRadius: '6px',
+              overflow: 'hidden',
+              boxShadow: '0 4px 10px rgba(0, 0, 0, 0.1)',
+              fontFamily: 'sans-serif',
+            }}
+          >
+            {/* Category List */}
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, width: '200px', maxHeight: '250px', overflowY: 'auto' }}>
+              {filteredCategories.map(([category]) => (
+                <li
+                  key={category}
+                  onMouseEnter={() => setHoveredCategory(category)}
+                  onMouseDown={() => {
+                    const ingredients = categorizedIngredients[category] || [];
+                    setSelectedIngredient(null);              // Clear subcategory filter
+                    setFilteredIngredientList(ingredients);  // Apply new category filter
+                    setSearchTerm('');
+                    setIsDropdownVisible(false);
+                    setHoveredCategory(null);
+                  }}
+                  style={{
+                    padding: '10px',
+                    cursor: 'pointer',
+                    background: hoveredCategory === category ? '#f0f0f0' : '#fff',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    borderBottom: '1px solid #eee',
+                  }}
+                >
+                  <span>{category}</span>
+                  <span style={{ fontSize: '10px', color: '#555' }}>▶</span>
+                </li>
+              ))}
+            </ul>
+
+            {/* Subcategory List */}
+            {hoveredCategory && isHoveringDropdown && (
+              <ul
+                style={{
+                  listStyle: 'none',
+                  margin: 0,
+                  padding: 0,
+                  width: '220px',
+                  maxHeight: '250px',
+                  overflowY: 'auto',
+                  background: '#fff',
+                  borderLeft: '1px solid #ccc',
+                }}
+              >
+                {(categorizedIngredients[hoveredCategory] || []).map((sub) => (
+                  <li
+                    key={sub}
+                    onMouseDown={() => {
+                      setSelectedIngredient(sub);
+                      setFilteredIngredientList([]);
+                      setSearchTerm('');
+                      setHoveredCategory(null);
+                      setIsDropdownVisible(false);
+                    }}
+                    style={{
+                      padding: '10px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid #eee',
+                    }}
+                  >
+                    {sub}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
       </div>
+
       <div style={{ marginBottom: '20px' }}>
         <label htmlFor="pembina-select">Filter by Pembina:</label>
         <select
@@ -400,7 +616,64 @@ function Graph() {
           ))}
         </select>
       </div>
+      <div style={{ marginBottom: '20px' }}>
+        <label>Filter by Date:</label>
+        <input
+          type="date"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          style={{ marginLeft: '10px', padding: '5px' }}
+        />
+        <input
+          type="date"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+          style={{ marginLeft: '10px', padding: '5px' }}
+        />
+      </div>
+
       {cytoscapeGraph}
+
+      {isLoading && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'rgba(255,255,255,0.9)',
+            padding: '20px 30px',
+            borderRadius: '10px',
+            boxShadow: '0 0 10px rgba(0,0,0,0.1)',
+            fontSize: '16px',
+            color: '#555',
+            zIndex: 1000,
+          }}
+        >
+          ⏳ Memuat data produk dan jejak distribusi...
+        </div>
+      )}
+
+      {!isLoading && elements.length === 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'rgba(255,255,255,0.9)',
+            padding: '20px 30px',
+            borderRadius: '10px',
+            boxShadow: '0 0 10px rgba(0,0,0,0.1)',
+            fontSize: '16px',
+            color: '#555',
+            zIndex: 1000,
+          }}
+        >
+          ❗Tidak ada produk yang memenuhi filter.
+        </div>
+      )}
+
       {selectedNode && (
         <div
           style={{
@@ -439,6 +712,9 @@ function Graph() {
               )}
               {selectedNode.extra.tanggal_diperbarui && (
                 <p><strong>Updated:</strong> {selectedNode.extra.tanggal_diperbarui}</p>
+              )}
+              {selectedNode.extra?.bahan?.length > 0 && (
+                <p><strong>Bahan:</strong> {selectedNode.extra.bahan.join(', ')}</p>
               )}
             </>
           )}
