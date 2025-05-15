@@ -5,13 +5,16 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
+  const [userEmail, setUserEmail] = useState(null);
 
   useEffect(() => {
     const autoLogin = async () => {
       try {
         const params = new URLSearchParams(); 
-        params.append('email', 'superadmin@gmail.com'); 
-        params.append('password', 'superadmin');
+        const email = 'superadmin@gmail.com';
+        const password = 'superadmin';
+        params.append('email', email); 
+        params.append('password', password);
 
         const response = await axios.post('https://riset.its.ac.id/teratai-dev/api/v1/login', params, {
             headers: {
@@ -20,6 +23,7 @@ export const AuthProvider = ({ children }) => {
         });
         // console.log(response.data.result.token)
         setToken(response.data.result.token);
+        setUserEmail(email);
         console.log('Login successful, token saved.');
       } catch (error) {
         console.error('Auto login failed:', error);
@@ -30,7 +34,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token }}>
+    <AuthContext.Provider value={{ token, userEmail }}>
       {children}
     </AuthContext.Provider>
   );

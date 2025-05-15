@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Home from './components/Home';
-import Graph from './components/Graph';
+import Graph from './components/graph';
 import ProductDetail from './components/ProductDetail';
 import './index.css';
 import { AuthProvider } from './context/AuthContext';

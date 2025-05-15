@@ -2,9 +2,10 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import CytoscapeComponent from 'react-cytoscapejs';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
+import { generatePdfReport } from './report';
 
 function Graph() {
-  const { token } = useAuth();
+  const { token, userEmail } = useAuth();
   const [products, setProducts] = useState([]);
   const [raws, setRaws] = useState([]);
   const [selectedIngredient, setSelectedIngredient] = useState('');
@@ -24,6 +25,23 @@ function Graph() {
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
   const [activeCategory, setActiveCategory] = useState(null); // optional, for future use
   const dropdownRef = useRef(null);
+  const [isDrilldownMode, setIsDrilldownMode] = useState(false);
+  const [drilldownNodeId, setDrilldownNodeId] = useState(null);
+  const [selectedProvince, setSelectedProvince] = useState('');
+
+  const [pendingCategoryFilter, setPendingCategoryFilter] = useState(null);
+
+  const INDONESIAN_PROVINCES = [
+        "Aceh", "Sumatera Utara", "Sumatera Barat", "Riau", "Kepulauan Riau", "Jambi",
+        "Sumatera Selatan", "Bangka Belitung", "Bengkulu", "Lampung", "DKI Jakarta",
+        "Jawa Barat", "Banten", "Jawa Tengah", "DI Yogyakarta", "Jawa Timur", 
+        "Bali", "Nusa Tenggara Barat", "Nusa Tenggara Timur", "Kalimantan Barat",
+        "Kalimantan Tengah", "Kalimantan Selatan", "Kalimantan Timur", 
+        "Kalimantan Utara", "Sulawesi Utara", "Sulawesi Tengah", "Sulawesi Selatan", 
+        "Sulawesi Tenggara", "Gorontalo", "Sulawesi Barat", "Maluku", 
+        "Maluku Utara", "Papua", "Papua Barat", "Papua Tengah", "Papua Pegunungan",
+        "Papua Selatan", "Papua Barat Daya"
+      ];
 
   useEffect(() => {
     // console.log('Token:', token);
@@ -95,6 +113,13 @@ function Graph() {
       const resultDict = {};
       const product_ingredient = {};
       setIsLoading(true);
+
+      const extractProvince = (alamat) => {
+        if (!alamat) return null;
+        return INDONESIAN_PROVINCES.find((prov) =>
+          alamat.toLowerCase().includes(prov.toLowerCase())
+        ) || null;
+      };
   
       for (const product of products) {
         try {
@@ -123,26 +148,31 @@ function Graph() {
           if (allBahan?.length) {
             product_ingredient[product.id_halal] = allBahan;
           }
+
+          const detectedProvince = extractProvince(product.alamat_usaha);
+
           resultDict[product.id_halal] = {
             track: extracted,
             nama_produk: product.nama_produk,
             id_pembina: product.id_pembina,
             id_perusahaan: product.id_perusahaan,
             jenis_perusahaan: product.jenis_perusahaan,
-            provinsi: product.provinsi,
+            alamat_usaha: product.alamat_usaha,
+            provinsi: detectedProvince,
             kota: product.kota,
             diperbarui_pada: product.diperbarui_pada
           };
-
-
-          
           // console.log(data)
-  
         } catch (error) {
           console.error(`❌ Error fetching for ${product.id_halal}:`, error.response?.status || error.message);
         }
       }
       setProductIngredientMap(product_ingredient);
+      Object.entries(product_ingredient).forEach(([productID, ingredients]) => {
+        if (ingredients.length) {
+          console.log(`📦 Product with multiple ingredients: ${productID}`, ingredients);
+        }
+      });
       setRaws(resultDict);
       setIsLoading(false); 
     };
@@ -155,7 +185,7 @@ function Graph() {
   const categorizedIngredients = useMemo(() => {
     const categoryKeywords = {
       "Daging Ayam": ["Ayam", "Dada", "Karkas Ayam", "Broiler"],
-      "Daging Sapi": ["Sapi", "Iga", "Boneless"],
+      "Daging Sapi": ["Sapi", "Iga"],
       "Daging Kerbau": ["Kerbau"],
       "Jeroan": ["Jeroan"],
       "Beras": ["Beras"],
@@ -260,6 +290,21 @@ function Graph() {
     return elements;
   };  
 
+  useEffect(() => {
+    if (pendingCategoryFilter) {
+      const ingredients = categorizedIngredients[pendingCategoryFilter];
+      if (ingredients?.length) {
+        // console.log("⏳ Applying filter for category:", pendingCategoryFilter);
+        // console.log("➡️ Final ingredients being set:", ingredients);
+        setFilteredIngredientList([...ingredients]);
+      } else {
+        setFilteredIngredientList([]);
+      }
+      setSelectedIngredient(null);  // also reset sub-filter
+      setPendingCategoryFilter(null);
+    }
+  }, [pendingCategoryFilter]);
+
   const filteredCategories = useMemo(() => {
     if (!searchTerm) return Object.entries(categorizedIngredients);
     return Object.entries(categorizedIngredients).filter(([category]) =>
@@ -269,18 +314,46 @@ function Graph() {
 
   const filteredRaws = useMemo(() => {
     const filtered = {};
+
+    if (isDrilldownMode && drilldownNodeId) {
+
+      for (const [productID, productData] of Object.entries(raws)) {
+        const track = productData.track || [];
+
+        if (
+          productID === drilldownNodeId ||                       // clicked a product node
+          productData.id_perusahaan === drilldownNodeId ||       // clicked a starting company node
+          track.includes(perusahaanMap[drilldownNodeId]?.nama_perusahaan) || // clicked a middle company node
+          track.includes(drilldownNodeId)                        // fallback match
+        ) {
+          filtered[productID] = track;
+        }
+      }
+
+      return filtered;
+    }
+
+    console.log("🧮 Filtering with list:", filteredIngredientList);
+    console.log('🔍 Filtering raws using:', {
+      selectedIngredient,
+      filteredIngredientList,
+    });
   
     for (const [productID, productData] of Object.entries(raws)) {
-      let matchesIngredient = false;
-        if (filteredIngredientList.length > 0) {
-          matchesIngredient = productIngredientMap[productID]?.some(ing => filteredIngredientList.includes(ing));
-        } else if (selectedIngredient) {
-          matchesIngredient = productIngredientMap[productID]?.includes(selectedIngredient);
-        } else {
-          matchesIngredient = true;
-        }
+      let matchesIngredient = true;
+
+      if (selectedIngredient) {
+        matchesIngredient = productIngredientMap[productID]?.includes(selectedIngredient);
+      } else if (filteredIngredientList.length > 0) {
+        matchesIngredient = productIngredientMap[productID]?.some(ing =>
+          filteredIngredientList.includes(ing)
+        );
+      }
 
       const matchesPembina = !selectedPembina || productData.id_pembina === selectedPembina;
+      const matchesProvince =
+        !selectedProvince ||
+        (raws[productID]?.provinsi === selectedProvince);
   
       const updatedAt = productData.diperbarui_pada;
       const updatedDate = updatedAt ? new Date(updatedAt) : null;
@@ -288,13 +361,13 @@ function Graph() {
         (!startDate || (updatedDate && updatedDate >= new Date(startDate))) &&
         (!endDate || (updatedDate && updatedDate <= new Date(endDate)));
   
-      if (matchesIngredient && matchesPembina && inDateRange) {
+      if (matchesIngredient && matchesPembina && inDateRange && matchesProvince) {
         filtered[productID] = productData.track;
       }
     }
   
     return filtered;
-  }, [selectedIngredient, selectedPembina, raws, productIngredientMap, startDate, endDate]);  
+  }, [selectedIngredient, filteredIngredientList, selectedPembina, raws, productIngredientMap, startDate, endDate, isDrilldownMode, drilldownNodeId, perusahaanMap, selectedProvince]);  
 
   useEffect(() => {
     setHoveredCategory(null);
@@ -319,6 +392,8 @@ function Graph() {
 
   useEffect(() => {
     const els = generateElements(filteredRaws);
+    console.log('✅ FilteredRaws:', filteredRaws);
+    console.log('✅ Graph elements regenerated:', els);
     setElements(els);
     setGraphKey(prev => prev + 1); // remount
   }, [filteredRaws]);
@@ -342,6 +417,12 @@ function Graph() {
     }
   }, [cyInstance, elements]);
 
+  const exitDrilldownAnd = (callback) => {
+    setIsDrilldownMode(false);
+    setDrilldownNodeId(null);
+    callback();
+  };
+
   const cytoscapeGraph = useMemo(() => (
     <CytoscapeComponent
       key={graphKey}
@@ -350,6 +431,10 @@ function Graph() {
       cy={(cy) => {
   
         cy.on('render', () => {
+        //   <pre style={{ fontSize: '12px' }}>
+        //     Selected Ingredient: {JSON.stringify(selectedIngredient)}{"\n"}
+        //     Filtered Ingredient List: {JSON.stringify(filteredIngredientList)}
+        //   </pre>
           cy.container().style.backgroundColor = '#f0f4ff';
           cy.container().style.backgroundImage =
             'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'40\' height=\'40\' viewBox=\'0 0 40 40\'%3E%3Crect width=\'40\' height=\'40\' fill=\'none\' stroke=\'%23d0d7e4\' stroke-width=\'1\' /%3E%3C/svg%3E")';
@@ -484,24 +569,127 @@ function Graph() {
     />
   ), [elements, graphKey, raws, perusahaanMap, productIngredientMap]);  
 
+  function applyCategoryFilter(ingredients) {
+      setSelectedIngredient(null); // reset sub-filter
+      setFilteredIngredientList([]); // force clear
+      setTimeout(() => {
+        setFilteredIngredientList([...ingredients]); // set new list after event loop
+      }, 0);
+  }
+
   const hoverTimeout = useRef(null);
   return (
-    <div className="App">
-      <h1>Cytoscape.js with React</h1>
+    <div className="App" style={{
+      fontFamily: 'Poppins, sans-serif',
+      backgroundColor: '#f9f6fc',
+      padding: '40px',
+      minHeight: '100vh',
+      color: '#333'
+    }}>
+    <div style={{ 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'center', 
+      marginBottom: '20px' 
+    }}>
+      <h1 style={{
+        color: '#5e2ca5',
+        fontSize: '28px',
+        fontWeight: '600',
+        marginBottom: '10px'
+      }}>
+        Telusur Jejak Produk Halal
+      </h1>
+      <button
+        onClick={() =>
+          generatePdfReport({
+            raws,
+            filteredRaws,
+            productIngredientMap,
+            perusahaanMap,
+            selectedIngredient,
+            filteredIngredientList,
+            selectedPembina,
+            startDate,
+            endDate,
+            categorizedIngredients,
+            loggedInUser: userEmail,
+          })
+        }
+        style={{
+          backgroundColor: '#6c3bb5',
+          color: 'white',
+          padding: '10px 18px',
+          fontWeight: '600',
+          border: 'none',
+          borderRadius: '8px',
+          boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+          cursor: 'pointer'
+        }}
+      >
+        Download Report PDF
+      </button>
+      {isDrilldownMode && (
+        <button
+          onClick={() => {
+            setIsDrilldownMode(false);
+            setDrilldownNodeId(null);
+          }}
+          style={{
+            marginLeft: '10px',
+            backgroundColor: '#6c757d',
+            color: 'white',
+            padding: '8px 16px',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+          }}
+        >
+          Kembali ke Filter
+        </button>
+      )}
+    </div>
+
+      {/* <pre>
+        Selected Ingredient: {JSON.stringify(selectedIngredient, null, 2)}
+        {'\n'}
+        Filtered Ingredients: {JSON.stringify(filteredIngredientList, null, 2)}
+      </pre> */}
+
       <div style={{ position: 'relative', marginBottom: '20px' }}>
-        <label htmlFor="ingredient-search">Filter by Category or Ingredient:</label>
+        <label 
+          style={{
+            fontWeight: '500',
+            color: '#5e2ca5',
+            marginRight: '8px'
+          }}
+          htmlFor="ingredient-search"
+        >Filter by Category or Ingredient:</label>
         <input
           id="ingredient-search"
           type="text"
           placeholder="Search category..."
           value={searchTerm}
           onChange={(e) => {
-            setSearchTerm(e.target.value);
-            setHoveredCategory(null);         // ensures clean reset
-            setIsDropdownVisible(true);       // dropdown is visible on typing
-            setFilteredIngredientList([]);    // clear previous category filter
+            const value = e.target.value;
+            setSearchTerm(value);
+            setHoveredCategory(null);
+            setIsDropdownVisible(true);
+
+            if (value.trim() === '') {
+                setFilteredIngredientList([]); // only reset graph when search is fully cleared
+                setSelectedIngredient(null);
+            }
           }}
-          style={{ marginLeft: '10px', padding: '5px', width: '250px' }}
+          style={{
+            padding: '10px',
+            borderRadius: '6px',
+            border: '1px solid #ccc',
+            marginLeft: '10px',
+            fontFamily: 'inherit',
+            fontSize: '14px'
+          }}
+
         />
         {isDropdownVisible && (
           <div
@@ -538,11 +726,13 @@ function Graph() {
                   onMouseEnter={() => setHoveredCategory(category)}
                   onMouseDown={() => {
                     const ingredients = categorizedIngredients[category] || [];
-                    setSelectedIngredient(null);              // Clear subcategory filter
-                    setFilteredIngredientList(ingredients);  // Apply new category filter
-                    setSearchTerm('');
-                    setIsDropdownVisible(false);
-                    setHoveredCategory(null);
+
+                    exitDrilldownAnd(() => {
+                      setPendingCategoryFilter(category);
+                      setSearchTerm(category);
+                      setIsDropdownVisible(false);
+                      setHoveredCategory(null);
+                    });
                   }}
                   style={{
                     padding: '10px',
@@ -578,11 +768,15 @@ function Graph() {
                   <li
                     key={sub}
                     onMouseDown={() => {
-                      setSelectedIngredient(sub);
-                      setFilteredIngredientList([]);
-                      setSearchTerm('');
-                      setHoveredCategory(null);
-                      setIsDropdownVisible(false);
+                      console.log(`🟧 Clicked Sub-Ingredient: ${sub}`);
+
+                      exitDrilldownAnd(() => {
+                        setSelectedIngredient(sub);
+                        setFilteredIngredientList([]);
+                        setSearchTerm(sub);
+                        setHoveredCategory(null);
+                        setIsDropdownVisible(false);
+                      });
                     }}
                     style={{
                       padding: '10px',
@@ -597,16 +791,74 @@ function Graph() {
             )}
           </div>
         )}
+        <button onClick={() => {
+            setFilteredIngredientList([]);
+            setSelectedIngredient(null);
+            setSearchTerm('');
+            }}>
+            Reset Filter
+        </button>
 
       </div>
 
       <div style={{ marginBottom: '20px' }}>
-        <label htmlFor="pembina-select">Filter by Pembina:</label>
+      <label 
+        style={{
+          fontWeight: '500',
+          color: '#5e2ca5',
+          marginRight: '8px'
+        }}
+      >
+        Filter by Provinsi:
+      </label>
+      <select
+        value={selectedProvince}
+        onChange={(e) => {
+          const val = e.target.value;
+          exitDrilldownAnd(() => setSelectedProvince(val));
+        }}
+        style={{
+          padding: '10px',
+          borderRadius: '6px',
+          border: '1px solid #ccc',
+          marginLeft: '10px',
+          fontFamily: 'inherit',
+          fontSize: '14px'
+        }}
+      >
+        <option value="">All Provinsi</option>
+        {INDONESIAN_PROVINCES.map((prov) => (
+          <option key={prov} value={prov}>{prov}</option>
+        ))}
+      </select>
+    </div>
+
+      <div style={{ marginBottom: '20px' }}>
+        <label 
+          style={{
+            fontWeight: '500',
+            color: '#5e2ca5',
+            marginRight: '8px'
+          }}
+        htmlFor="pembina-select"
+        >
+          Filter by Pembina:
+        </label>
         <select
           id="pembina-select"
-          onChange={(e) => setSelectedPembina(e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value;
+            exitDrilldownAnd(() => setSelectedPembina(val));
+          }}
           value={selectedPembina}
-          style={{ marginLeft: '10px', padding: '5px' }}
+          style={{
+            padding: '10px',
+            borderRadius: '6px',
+            border: '1px solid #ccc',
+            marginLeft: '10px',
+            fontFamily: 'inherit',
+            fontSize: '14px'
+          }}
         >
           <option value="">All Pembina</option>
           {perusahaan.map((p) => (
@@ -617,18 +869,46 @@ function Graph() {
         </select>
       </div>
       <div style={{ marginBottom: '20px' }}>
-        <label>Filter by Date:</label>
+        <label 
+          style={{
+            fontWeight: '500',
+            color: '#5e2ca5',
+            marginRight: '8px'
+          }}
+        >
+        Filter by Date:
+        </label>
         <input
           type="date"
           value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          style={{ marginLeft: '10px', padding: '5px' }}
+          onChange={(e) => {
+            const val = e.target.value;
+            exitDrilldownAnd(() => setStartDate(val));
+          }}
+          style={{
+            padding: '10px',
+            borderRadius: '6px',
+            border: '1px solid #ccc',
+            marginLeft: '10px',
+            fontFamily: 'inherit',
+            fontSize: '14px'
+          }}
         />
         <input
           type="date"
           value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-          style={{ marginLeft: '10px', padding: '5px' }}
+          onChange={(e) => {
+            const val = e.target.value;
+            exitDrilldownAnd(() => setEndDate(val));
+          }}
+          style={{
+            padding: '10px',
+            borderRadius: '6px',
+            border: '1px solid #ccc',
+            marginLeft: '10px',
+            fontFamily: 'inherit',
+            fontSize: '14px'
+          }}
         />
       </div>
 
@@ -682,14 +962,15 @@ function Graph() {
             left: selectedNode.x,
             transform: 'translate(-10%, -10%)',
             background: 'white',
-            border: '1px solid #ccc',
+            border: '1px solid #e0c8f2',
             padding: '16px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            borderRadius: '12px',
+            boxShadow: '0 8px 24px rgba(108, 59, 181, 0.15)',
             zIndex: 1000,
             maxWidth: '300px',
             width: 'max-content',
             fontSize: '14px',
+            color: '#333'
           }}
         >
           <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px' }}>Node Info</h3>
@@ -716,6 +997,30 @@ function Graph() {
               {selectedNode.extra?.bahan?.length > 0 && (
                 <p><strong>Bahan:</strong> {selectedNode.extra.bahan.join(', ')}</p>
               )}
+              {!isDrilldownMode && (
+                <button
+                   onClick={() => {
+                    exitDrilldownAnd(() => {
+                      setDrilldownNodeId(selectedNode.id);
+                      setIsDrilldownMode(true);
+                      setSelectedNode(null);
+                    });
+                  }}
+                  style={{
+                    marginTop: '8px',
+                    backgroundColor: '#17a2b8',
+                    color: 'white',
+                    padding: '6px 12px',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: 'pointer',
+                    width: '100%',
+                  }}
+                >
+                  Tampilkan Jejak Lengkap
+                </button>
+              )}
+
             </>
           )}
         
