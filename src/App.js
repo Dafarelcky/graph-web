@@ -6,6 +6,7 @@ import Graph from './components/graph';
 import ProductDetail from './components/ProductDetail';
 import './index.css';
 import { AuthProvider } from './context/AuthContext';
+import StatisticsPage from './components/stat';
 
 function App() {
   return (
@@ -21,9 +22,10 @@ function App() {
             {/* Main Content */}
             <div className="col-md-9 col-lg-10 p-4">
               <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/graph" element={<Graph />} />
+                <Route path="/" element={<Graph />} />
+                {/* <Route path="/graph" element={<Graph />} /> */}
                 <Route path="/:id" element={<ProductDetail />} />
+                <Route path="/statistics" element={<StatisticsPage />} />
               </Routes>
             </div>
           </div>

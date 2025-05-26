@@ -3,14 +3,17 @@ import CytoscapeComponent from 'react-cytoscapejs';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { generatePdfReport } from './report';
+import { useNavigate } from 'react-router-dom';
 
 function Graph() {
   const { token, userEmail } = useAuth();
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [raws, setRaws] = useState([]);
   const [selectedIngredient, setSelectedIngredient] = useState('');
   const [selectedPembina, setSelectedPembina] = useState('');
   const [productIngredientMap, setProductIngredientMap] = useState({});
+  const [productIngredientMap_batchRaws, setProductIngredientMap_batchRaws] = useState({});
   const [perusahaan, setPerusahaan] = useState([]);
   const [cyInstance, setCyInstance] = useState(null);
   const [graphKey, setGraphKey] = useState(0);
@@ -23,12 +26,21 @@ function Graph() {
   const [filteredIngredientList, setFilteredIngredientList] = useState([]);
   const [isHoveringDropdown, setIsHoveringDropdown] = useState(false);
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
-  const [activeCategory, setActiveCategory] = useState(null); // optional, for future use
+  // const [activeCategory, setActiveCategory] = useState(null); 
   const dropdownRef = useRef(null);
   const [isDrilldownMode, setIsDrilldownMode] = useState(false);
   const [drilldownNodeId, setDrilldownNodeId] = useState(null);
   const [selectedProvince, setSelectedProvince] = useState('');
+  const hasFetchedProducts = useRef(false);
+  const hasFetchedCompanies = useRef(false);
+  const hasFetchedProductDetail = useRef(false);
+  const [batchProducts, setBatchProducts] =  useState([]);
+  const hasFetchedBatchProduct = useRef(false);
+  const [isDateFiltered, setIsDateFiltered] = useState(false);
+  const [batchRaws, setBatchRaws] = useState({});
 
+  const [pendingStartDate, setPendingStartDate] = useState('');
+  const [pendingEndDate, setPendingEndDate] = useState('');
   const [pendingCategoryFilter, setPendingCategoryFilter] = useState(null);
 
   const INDONESIAN_PROVINCES = [
@@ -43,10 +55,19 @@ function Graph() {
         "Papua Selatan", "Papua Barat Daya"
       ];
 
+  const isDateInRange = (dateStr, start, end) => {
+    const date = new Date(dateStr);
+    return (!start || new Date(start) <= date) && (!end || date <= new Date(end));
+  };
+
+  const username = 'ITStEr4Ta1!';
+  const password = 'bzhbf8q5fbkqb-bjhefb90yfebjh-7hjebfq3745i';
+
   useEffect(() => {
     // console.log('Token:', token);
     const fetchData = async () => {
-      if (token) {
+      if (token && !hasFetchedProducts.current) {
+        hasFetchedProducts.current = true;
         try {
           const response = await axios.get('https://riset.its.ac.id/teratai-dev/api/v1/produk-master', {
             headers: {
@@ -65,8 +86,31 @@ function Graph() {
   }, [token]);
 
   useEffect(() => {
+    // console.log('Token:', token);
     const fetchData = async () => {
-      if (token) {
+      if (token && !hasFetchedBatchProduct.current) {
+        hasFetchedBatchProduct.current = true;
+        try {
+          const response = await axios.get('https://riset.its.ac.id/teratai-dev/api/v1/batch-pelaku-usaha', {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          // console.log('Data fetched successfully:', response.data.result.produkMaster);
+          setBatchProducts(response.data.result.batchPelakuUsaha);
+        } catch (error) {
+          console.error('Failed to fetch data:', error);
+        }
+      }
+    };
+
+    fetchData();
+  }, [token]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (token && !hasFetchedCompanies.current) {
+        hasFetchedCompanies.current = true;
         try {
           const response = await axios.get('https://riset.its.ac.id/teratai-dev/api/v1/perusahaan', {
             headers: {
@@ -108,8 +152,6 @@ function Graph() {
 
   useEffect(() => {
     const fetchProductDetail = async () => {
-      const username = 'ITStEr4Ta1!';
-      const password = 'bzhbf8q5fbkqb-bjhefb90yfebjh-7hjebfq3745i';
       const resultDict = {};
       const product_ingredient = {};
       setIsLoading(true);
@@ -120,56 +162,81 @@ function Graph() {
           alamat.toLowerCase().includes(prov.toLowerCase())
         ) || null;
       };
-  
-      for (const product of products) {
-        try {
-          const res = await axios.get(
-            `https://riset.its.ac.id/teratai-dev/api/v1/traceability/${product.id_halal}`,
-            { auth: { username, password } }
-          );
-  
-          const data = res.data.result;
-          const extracted = [];
-  
-          // Loop through each key in the result object
-          for (const key in data) {
-            const item = data[key];
-            if (item?.nama_perusahaan) {
-              extracted.push(item.nama_perusahaan);
-            } else if (item?.juru_sembelih) {
-              extracted.push(item.juru_sembelih);
+      if (!hasFetchedProductDetail.current && products.length > 0) {
+        hasFetchedProductDetail.current = true;
+        for (const product of products) {
+          try {
+            const res = await axios.get(
+              `https://riset.its.ac.id/teratai-dev/api/v1/traceability/${product.id_halal}`,
+              { auth: { username, password } }
+            );
+    
+            const data = res.data.result;
+            const extracted = [];
+    
+            // Loop through each key in the result object
+            for (const key in data) {
+              const item = data[key];
+              if (item?.nama_perusahaan) {
+                extracted.push(item.nama_perusahaan);
+              } else if (item?.juru_sembelih) {
+                extracted.push(item.juru_sembelih);
+              }
             }
+    
+            // Store the array in the dictionary using id_halal as the key
+            const dataArray = Object.values(data);
+
+            const allBahan = dataArray[0]?.bahan?.map(b => b.nama_bahan).filter(Boolean);
+            if (allBahan?.length) {
+              product_ingredient[product.id_halal] = allBahan;
+            }
+
+            let combinedTrack = extracted;
+
+            const allIngredientTracks = {};
+
+            if (dataArray[0]?.bahan?.length > 1) {
+              for (const b of dataArray[0].bahan) {
+                try {
+                  const resBahan = await axios.get(
+                    `https://riset.its.ac.id/teratai-dev/api/v1/traceability/${b.id_halal}`,
+                    { auth: { username, password } }
+                  );
+                  const pathData = Object.values(resBahan.data.result)
+                    .map(x => x.nama_perusahaan || x.juru_sembelih)
+                    .filter(Boolean);
+                  allIngredientTracks[b.nama_bahan] = pathData;
+                } catch (err) {
+                  console.error('Error fetching ingredient trace:', err);
+                }
+              }
+              combinedTrack = extracted; // only keep main product's trace in default state
+            }
+
+            const detectedProvince = extractProvince(product.alamat_usaha);
+
+            resultDict[product.id_halal] = {
+              track: combinedTrack,
+              nama_produk: product.nama_produk,
+              id_pembina: product.id_pembina,
+              id_perusahaan: product.id_perusahaan,
+              jenis_perusahaan: product.jenis_perusahaan,
+              alamat_usaha: product.alamat_usaha,
+              provinsi: detectedProvince,
+              kota: product.kota,
+              dibuat_pada: product.dibuat_pada,
+              ingredientTracks: allIngredientTracks
+            };
+            // console.log(data)
+          } catch (error) {
+            console.error(`❌ Error fetching for ${product.id_halal}:`, error.response?.status || error.message);
           }
-  
-          // Store the array in the dictionary using id_halal as the key
-          const dataArray = Object.values(data);
-
-          const allBahan = dataArray[0]?.bahan?.map(b => b.nama_bahan).filter(Boolean);
-          if (allBahan?.length) {
-            product_ingredient[product.id_halal] = allBahan;
-          }
-
-          const detectedProvince = extractProvince(product.alamat_usaha);
-
-          resultDict[product.id_halal] = {
-            track: extracted,
-            nama_produk: product.nama_produk,
-            id_pembina: product.id_pembina,
-            id_perusahaan: product.id_perusahaan,
-            jenis_perusahaan: product.jenis_perusahaan,
-            alamat_usaha: product.alamat_usaha,
-            provinsi: detectedProvince,
-            kota: product.kota,
-            diperbarui_pada: product.diperbarui_pada
-          };
-          // console.log(data)
-        } catch (error) {
-          console.error(`❌ Error fetching for ${product.id_halal}:`, error.response?.status || error.message);
         }
       }
       setProductIngredientMap(product_ingredient);
       Object.entries(product_ingredient).forEach(([productID, ingredients]) => {
-        if (ingredients.length) {
+        if (ingredients.length > 1) {
           console.log(`📦 Product with multiple ingredients: ${productID}`, ingredients);
         }
       });
@@ -182,12 +249,126 @@ function Graph() {
     }
   }, [products]);
 
+  useEffect(() => {
+    const fetchBatchData = async () => {
+      if (!startDate && !endDate) {
+        setIsDateFiltered(false);
+        return;
+      }
+      const resultDict = {};
+      const product_ingredient = {};
+      setIsLoading(true);
+
+      const extractProvince = (alamat) => {
+        if (!alamat) return null;
+        return INDONESIAN_PROVINCES.find((prov) =>
+          alamat.toLowerCase().includes(prov.toLowerCase())
+        ) || null;
+      };
+
+      const filteredMap = {};
+
+      batchProducts.forEach((product) => {
+        if (isDateInRange(product.dibuat_pada, startDate, endDate)) {
+          const existing = filteredMap[product.id_halal];
+          if (
+            !existing ||
+            new Date(product.diperbarui_pada) > new Date(existing.diperbarui_pada)
+          ) {
+            filteredMap[product.id_halal] = product;
+          }
+        }
+      });
+
+      const filtered = Object.values(filteredMap);
+
+      // const result = {};
+      for (const product of filtered) {
+        // if(!raws[product.id_halal]) continue;
+        try {
+          const res = await axios.get(
+            `https://riset.its.ac.id/teratai-dev/api/v1/traceability/${product.id_halal}?batch=${product.id_batch}`,
+            { auth: { username, password } }
+          );
+          const data = res.data.result;
+          const extracted = [];
+
+          for (const key in data) {
+            const item = data[key];
+            if (item?.nama_perusahaan) {
+              extracted.push(item.nama_perusahaan);
+            } else if (item?.juru_sembelih) {
+              extracted.push(item.juru_sembelih);
+            }
+          }
+          const dataArray = Object.values(data);
+
+          const allBahan = dataArray[0]?.bahan?.map(b => b.nama_bahan).filter(Boolean);
+          if (allBahan?.length) {
+            product_ingredient[product.id_halal] = allBahan;
+          }
+
+          let combinedTrack = extracted;
+
+          const allIngredientTracks = {};
+
+          if (dataArray[0]?.bahan?.length > 1) {
+            for (const b of dataArray[0].bahan) {
+              try {
+                const resBahan = await axios.get(
+                  `https://riset.its.ac.id/teratai-dev/api/v1/traceability/${b.id_halal}`,
+                  { auth: { username, password } }
+                );
+                const pathData = Object.values(resBahan.data.result)
+                  .map(x => x.nama_perusahaan || x.juru_sembelih)
+                  .filter(Boolean);
+                allIngredientTracks[b.nama_bahan] = pathData;
+              } catch (err) {
+                console.error('Error fetching ingredient trace:', err);
+              }
+            }
+            combinedTrack = extracted; // only keep main product's trace in default state
+          }
+
+          const detectedProvince = extractProvince(raws[product.id_halal].alamat_usaha);
+
+          resultDict[product.id_halal] = {
+            track: combinedTrack,
+            nama_produk: raws[product.id_halal].nama_produk,
+            id_pembina: raws[product.id_halal].id_pembina,
+            id_perusahaan: raws[product.id_halal].id_perusahaan,
+            jenis_perusahaan: raws[product.id_halal].jenis_perusahaan,
+            alamat_usaha: raws[product.id_halal].alamat_usaha,
+            provinsi: detectedProvince,
+            kota: raws[product.id_halal].kota,
+            dibuat_pada: product.dibuat_pada,
+            ingredientTracks: allIngredientTracks
+          };
+        } catch (err) {
+          console.error(`❌ Failed fetching traceability for ${product.id_halal}`, err);
+        }
+      }
+      setProductIngredientMap_batchRaws(product_ingredient);
+      Object.entries(product_ingredient).forEach(([productID, ingredients]) => {
+        if (ingredients.length > 1) {
+          console.log(`📦 Product with multiple ingredients: ${productID}`, ingredients);
+        }
+      });
+      console.log(resultDict)
+      setBatchRaws(resultDict);
+      setIsDateFiltered(true);
+      setIsLoading(false); 
+    };
+
+    fetchBatchData();
+  }, [startDate, endDate, batchProducts, raws]);
+
   const categorizedIngredients = useMemo(() => {
     const categoryKeywords = {
-      "Daging Ayam": ["Ayam", "Dada", "Karkas Ayam", "Broiler"],
-      "Daging Sapi": ["Sapi", "Iga"],
-      "Daging Kerbau": ["Kerbau"],
-      "Jeroan": ["Jeroan"],
+      "Ayam": ["Ayam", "Dada", "Karkas Ayam", "Broiler"],
+      "Sapi": ["Sapi", "Iga"],
+      "Kerbau": ["Kerbau"],
+      "Jeroan": ["Jeroan", "Ati"],
       "Beras": ["Beras"],
       "Mie / Bihun": ["Mie", "BIHUN", "Bihun"],
       "Olahan": ["Bakso", "Mojo", "Segar"],
@@ -228,67 +409,199 @@ function Graph() {
   const generateElements = (data) => {
     const elements = [];
     const addedNodes = new Set();
-  
+    
+
     for (const productID in data) {
-      const chain = data[productID];
-  
-      if (!chain || chain.length === 0) continue;
-  
-      const source = chain[0]; // "Tera Abadi"
+      // if (raws[productID]?.track && batchRaws[productID]?.track) {
+      //   console.log('🟣 RAW track:', productID, raws[productID].track);
+      //   console.log('🟢 BATCH track:', productID, batchRaws[productID].track);
+      // }
+      
+      // const chain = data[productID];
+      // if (!chain || chain.length === 0) continue;
+
+      const rawItem = data[productID];
+      const chain = Array.isArray(rawItem) ? rawItem : rawItem?.track;
+
+      if (!Array.isArray(chain) || chain.length === 0) continue;
+
+      const productData = (isDateFiltered ? batchRaws : raws)[productID];
+      const source = chain[0]; // usually "Tera Abadi"
       const rest = chain.slice(1);
-  
-      // Add node: "Tera Abadi"
-      if (!addedNodes.has(raws[productID].id_perusahaan)) {
-        const perusahaanInfo = perusahaanMap[raws[productID].id_perusahaan];
-        const isPelaku = perusahaanInfo?.jenis_usaha?.toLowerCase() === 'pelaku_usaha';
+
+      const perusahaanInfo = perusahaanMap[productData.id_perusahaan];
+      const isPelaku = perusahaanInfo?.jenis_usaha?.toLowerCase() === 'pelaku_usaha';
+
+      // 🟠 Pelaku node
+      if (!addedNodes.has(productData.id_perusahaan)) {
         elements.push({
-          data: { id: raws[productID].id_perusahaan, label: source },
-          classes: isPelaku ? 'entity pelaku' : 'entity'
+          data: { id: productData.id_perusahaan, label: source },
+          classes: isPelaku ? 'entity pelaku' : 'entity',
         });
-        addedNodes.add(raws[productID].id_perusahaan);
+        addedNodes.add(productData.id_perusahaan);
       }
-  
-      // Add product node
+
+      // 🟢 Product node
       if (!addedNodes.has(productID)) {
-        elements.push({ data: { id: productID, label: raws[productID].nama_produk }, classes: 'product' });
+        elements.push({
+          data: { id: productID, label: productData.nama_produk },
+          classes: 'product',
+        });
         addedNodes.add(productID);
       }
-  
-      // Edge: Tera Abadi → Product
+
+      // 🧠 Edge: pelaku → product
       elements.push({
         data: {
-          id: `${raws[productID].id_perusahaan}_${productID}`,
-          source: raws[productID].id_perusahaan,
+          id: `${productData.id_perusahaan}_${productID}`,
+          source: productData.id_perusahaan,
           target: productID,
         },
       });
-  
-      // Continue the chain: product → next → next → ...
-      let prev = productID;
-      for (const currentName of rest) {
-        // Find the perusahaan by name
-        const currentEntry = Object.values(perusahaanMap).find(c => c.nama_perusahaan === currentName);
-        const currentID = currentEntry?._id || `juru_sembelih_${currentName}`; // fallback
 
-        if (!addedNodes.has(currentID)) {
-          elements.push({ data: { id: currentID, label: currentName }, classes: 'entity' });
-          addedNodes.add(currentID);
+      // ✅ Add Ingredient nodes + tracks (only in drilldown mode and multi-ingredient)
+      // const ingredients = productIngredientMap[productID] || [];
+      const ingredientTracks = productData.ingredientTracks || {};
+      const ingredients = Object.keys(ingredientTracks);
+
+      if (ingredients.length > 1) {
+        const matchedIngredients =
+          isDrilldownMode && filteredRaws[productID]?.matchedIngredients
+            ? filteredRaws[productID].matchedIngredients
+            : ingredients;
+
+        for (const ing of matchedIngredients) {
+          const ingredientTrack = productData.ingredientTracks?.[ing] || [];
+
+          let prev = isDrilldownMode
+            ? `bahan_${ing}_${productID}`
+            : productID; // Start from product directly if not in drilldown
+
+          if (isDrilldownMode) {
+            const ingredientNodeId = prev;
+
+            if (!addedNodes.has(ingredientNodeId)) {
+              elements.push({
+                data: { id: ingredientNodeId, label: ing },
+                classes: 'ingredient',
+              });
+              addedNodes.add(ingredientNodeId);
+            }
+
+            // Edge: product → ingredient
+            elements.push({
+              data: {
+                id: `${productID}_${ingredientNodeId}`,
+                source: productID,
+                target: ingredientNodeId,
+              },
+            });
+          }
+
+          // Shared trace rendering logic
+          // const drilldownName = drilldownNodeId
+          //   ? perusahaanMap[drilldownNodeId]?.nama_perusahaan || drilldownNodeId.replace('juru_sembelih_', '')
+          //   : null;
+
+          // let shouldRender = !isDrilldownMode; // always true outside drilldown
+          // Only render this ingredient track if it includes the drilldown node
+          const drilldownName = drilldownNodeId
+            ? perusahaanMap[drilldownNodeId]?.nama_perusahaan || drilldownNodeId.replace('juru_sembelih_', '')
+            : null;
+
+          // Skip this entire ingredient if it doesn't go through drilldown node
+          const isDrillingFromProduct = drilldownNodeId === productID;
+
+          // if (isDrilldownMode && drilldownName && !ingredientTrack.includes(drilldownName) && !isDrillingFromProduct) {
+          //   continue;
+          // }
+
+          const productTrack = productData.track || [];
+          const drillIsInProductTrack =
+            productTrack.includes(drilldownName) ||
+            productData.id_perusahaan === drilldownNodeId;
+
+          if (
+            isDrilldownMode &&
+            drilldownName &&
+            !ingredientTrack.includes(drilldownName) &&
+            !isDrillingFromProduct &&
+            !drillIsInProductTrack
+          ) {
+            continue; // skip only if drilldown not in ingredient OR product path
+          }
+
+          // Now render the entire track as usual:
+          // let prev = isDrilldownMode
+          //   ? `bahan_${ing}_${productID}`
+          //   : productID;
+
+          for (const name of ingredientTrack) {
+            // if (isDrilldownMode && drilldownName && !shouldRender) {
+            //   if (name === drilldownName) {
+            //     shouldRender = true;
+            //   } else {
+            //     continue; // skip until drilldown match
+            //   }
+            // }
+
+             // now start rendering nodes after the drilldown node appears in the path
+            const company = Object.values(perusahaanMap).find(c => c.nama_perusahaan === name);
+            const nodeId = company?._id || `juru_sembelih_${name}`;
+
+            if (!addedNodes.has(nodeId)) {
+              elements.push({
+                data: { id: nodeId, label: name },
+                classes: 'entity',
+              });
+              addedNodes.add(nodeId);
+            }
+
+            elements.push({
+              data: {
+                id: `${prev}_${nodeId}`,
+                source: prev,
+                target: nodeId,
+              },
+            });
+
+            prev = nodeId;
+          }
         }
+      }
 
-        elements.push({
-          data: {
-            id: `${prev}_${currentID}`,
-            source: prev,
-            target: currentID,
-          },
-        });
+      // 🧱 Add standard trace chain (if not in drilldown, or 1-ingredient only)
+      // const numIngredients = productIngredientMap[productID]?.length || 0;
+      const numIngredients = ingredients.length;
+      if (!isDrilldownMode || numIngredients <= 1) {
+        let prev = productID;
+        for (const name of rest) {
+          const entry = Object.values(perusahaanMap).find(c => c.nama_perusahaan === name);
+          const nodeId = entry?._id || `juru_sembelih_${name}`;
 
-        prev = currentID;
+          if (!addedNodes.has(nodeId)) {
+            elements.push({
+              data: { id: nodeId, label: name },
+              classes: 'entity',
+            });
+            addedNodes.add(nodeId);
+          }
+
+          elements.push({
+            data: {
+              id: `${prev}_${nodeId}`,
+              source: prev,
+              target: nodeId,
+            },
+          });
+
+          prev = nodeId;
+        }
       }
     }
-  
+
     return elements;
-  };  
+  };
 
   useEffect(() => {
     if (pendingCategoryFilter) {
@@ -314,32 +627,62 @@ function Graph() {
 
   const filteredRaws = useMemo(() => {
     const filtered = {};
+    const sourceData = isDateFiltered ? batchRaws : raws;
 
     if (isDrilldownMode && drilldownNodeId) {
+      const normalizedName = drilldownNodeId.replace('juru_sembelih_', '');
 
-      for (const [productID, productData] of Object.entries(raws)) {
+      for (const [productID, productData] of Object.entries(sourceData)) {
         const track = productData.track || [];
+        const ingredientTracks = productData.ingredientTracks || {};
 
-        if (
-          productID === drilldownNodeId ||                       // clicked a product node
-          productData.id_perusahaan === drilldownNodeId ||       // clicked a starting company node
-          track.includes(perusahaanMap[drilldownNodeId]?.nama_perusahaan) || // clicked a middle company node
-          track.includes(drilldownNodeId)                        // fallback match
-        ) {
-          filtered[productID] = track;
+        const drilldownName =
+          perusahaanMap[drilldownNodeId]?.nama_perusahaan || normalizedName;
+
+        // Check if drilldown matches full product track
+        const matchesMainTrack =
+          productID === drilldownNodeId ||
+          productData.id_perusahaan === drilldownNodeId ||
+          track.includes(drilldownName);
+
+        // Check for ingredient matches
+        const matchingIngredients = Object.entries(ingredientTracks)
+          .filter(([_, path]) =>
+            path.includes(drilldownName)
+          )
+          .map(([ingredientName]) => ingredientName);
+
+        // ⛔ Avoid false-positive full match: only show full product if drilldown is truly in main track
+        const numIngredients = Object.keys(ingredientTracks).length;
+
+        if (matchesMainTrack && numIngredients <= 1) {
+          // Single-ingredient — include full
+          filtered[productID] = { track, reason: 'main' };
+        } else if (matchesMainTrack && numIngredients > 1 && matchingIngredients.length === 0) {
+          // Multi-ingredient but drilldown in main track — include product only
+          filtered[productID] = { track, reason: 'main-no-ing' };
+        } else if (matchingIngredients.length > 0) {
+          // Multi-ingredient with partial match
+          filtered[productID] = {
+            track,
+            matchedIngredients: matchingIngredients,
+            reason: 'partial-ingredient',
+          };
         }
       }
 
       return filtered;
     }
 
-    console.log("🧮 Filtering with list:", filteredIngredientList);
-    console.log('🔍 Filtering raws using:', {
-      selectedIngredient,
-      filteredIngredientList,
-    });
+
+
+    // console.log("🧮 Filtering with list:", filteredIngredientList);
+    // console.log('🔍 Filtering raws using:', {
+    //   selectedIngredient,
+    //   filteredIngredientList,
+    // });
   
-    for (const [productID, productData] of Object.entries(raws)) {
+    for (const [productID, productData] of Object.entries(sourceData)) {
       let matchesIngredient = true;
 
       if (selectedIngredient) {
@@ -353,9 +696,9 @@ function Graph() {
       const matchesPembina = !selectedPembina || productData.id_pembina === selectedPembina;
       const matchesProvince =
         !selectedProvince ||
-        (raws[productID]?.provinsi === selectedProvince);
+        (sourceData[productID]?.provinsi === selectedProvince);
   
-      const updatedAt = productData.diperbarui_pada;
+      const updatedAt = productData.dibuat_pada;
       const updatedDate = updatedAt ? new Date(updatedAt) : null;
       const inDateRange =
         (!startDate || (updatedDate && updatedDate >= new Date(startDate))) &&
@@ -367,7 +710,7 @@ function Graph() {
     }
   
     return filtered;
-  }, [selectedIngredient, filteredIngredientList, selectedPembina, raws, productIngredientMap, startDate, endDate, isDrilldownMode, drilldownNodeId, perusahaanMap, selectedProvince]);  
+  }, [selectedIngredient, filteredIngredientList, selectedPembina, raws, productIngredientMap, startDate, endDate, isDrilldownMode, drilldownNodeId, perusahaanMap, selectedProvince, batchRaws]);  
 
   useEffect(() => {
     setHoveredCategory(null);
@@ -392,8 +735,8 @@ function Graph() {
 
   useEffect(() => {
     const els = generateElements(filteredRaws);
-    console.log('✅ FilteredRaws:', filteredRaws);
-    console.log('✅ Graph elements regenerated:', els);
+    // console.log('✅ FilteredRaws:', filteredRaws);
+    // console.log('✅ Graph elements regenerated:', els);
     setElements(els);
     setGraphKey(prev => prev + 1); // remount
   }, [filteredRaws]);
@@ -444,10 +787,18 @@ function Graph() {
         setCyInstance(cy); // Save instance once
         cy.on('tap', 'node', (event) => {
           const node = event.target;
+          // const nodeData = node.data();
+          // setSelectedNode({
+          //   id: nodeData.id,
+          //   label: nodeData.label,
+          //   extra: nodeData.extra || null,
+          // });
           const pos = node.renderedPosition();
           const nodeId = node.id();
-          const product = raws[nodeId];
+          const product = (isDateFiltered ? batchRaws : raws)[nodeId];
+          const product_ingredient = (isDateFiltered ? productIngredientMap_batchRaws : productIngredientMap)
           const company = perusahaanMap[nodeId];
+          const isJuru = nodeId.startsWith('juru_sembelih_');
           const container = cy.container().getBoundingClientRect();
         
           const x = Math.min(pos.x + container.left, window.innerWidth - 300);
@@ -456,6 +807,52 @@ function Graph() {
           // 🔴 First: remove all previous highlights
           cy.edges().removeClass('highlighted');
         
+          if (product?.ingredientTracks && Object.keys(product.ingredientTracks).length > 0) {
+            Object.entries(product.ingredientTracks).forEach(([ing, path]) => {
+              let prev = `bahan_${ing}_${nodeId}`;
+              
+              path.forEach(currentName => {
+                const currentEntry = Object.values(perusahaanMap).find(c => c.nama_perusahaan === currentName);
+                const currentID = currentEntry?._id || `juru_sembelih_${currentName}`;
+
+                // Highlight edge
+                const edgeId = `${prev}_${currentID}`;
+                const edge = cy.getElementById(edgeId);
+                if (edge) edge.addClass('highlighted');
+
+                // Highlight node (optional)
+                const node = cy.getElementById(currentID);
+                if (node) node.addClass('highlighted');
+
+                prev = currentID;
+              });
+            });
+          }
+
+          // 🟡 If node is an ingredient node
+          if (nodeId.startsWith('bahan_')) {
+            const [_, ingName, productID] = nodeId.split('_');
+
+            const ingredientTrack = (isDateFiltered ? batchRaws : raws)[productID]?.ingredientTracks?.[ingName];
+            if (ingredientTrack?.length) {
+              let prev = nodeId;
+
+              for (const currentName of ingredientTrack) {
+                const currentEntry = Object.values(perusahaanMap).find(c => c.nama_perusahaan === currentName);
+                const currentID = currentEntry?._id || `juru_sembelih_${currentName}`;
+
+                const edgeId = `${prev}_${currentID}`;
+                const edge = cy.getElementById(edgeId);
+                if (edge) edge.addClass('highlighted');
+
+                const n = cy.getElementById(currentID);
+                if (n) n.addClass('highlighted');
+
+                prev = currentID;
+              }
+            }
+          }
+
           // 🔴 Highlight path from this node
           if (product?.track) {
             const track = product.track;
@@ -485,14 +882,16 @@ function Graph() {
             label: node.data('label'),
             x,
             y,
-            extra: product || company
+            extra: product || company || isJuru
               ? {
                   jenis_perusahaan: product?.jenis_perusahaan || company?.jenis_usaha,
                   alamat_usaha: company?.alamat_usaha || null,
                   provinsi: product?.provinsi || null,
                   kota: product?.kota || null,
-                  tanggal_diperbarui: product?.diperbarui_pada || company?.diperbarui_pada,
-                  bahan: productIngredientMap[nodeId] || [],
+                  tanggal_diperbarui: product?.dibuat_pada || company?.dibuat_pada,
+                  bahan: product_ingredient[nodeId] || [],
+                  id: isJuru?.id,
+                  Label: isJuru?.label
                 }
               : null,
           });
@@ -555,6 +954,14 @@ function Graph() {
           },
         },
         {
+          selector: 'node.ingredient',
+          style: {
+            backgroundColor: '#FFD700',
+            shape: 'round-rectangle',
+            fontSize: 10
+          }
+        },
+        {
           selector: 'edge.highlighted',
           style: {
             lineColor: '#FF4136',
@@ -567,7 +974,7 @@ function Graph() {
         },     
       ]}
     />
-  ), [elements, graphKey, raws, perusahaanMap, productIngredientMap]);  
+  ), [elements, graphKey, raws, perusahaanMap, productIngredientMap, batchRaws]);  
 
   function applyCategoryFilter(ingredients) {
       setSelectedIngredient(null); // reset sub-filter
@@ -585,6 +992,7 @@ function Graph() {
       padding: '40px',
       minHeight: '100vh',
       color: '#333'
+      // position: 'relative'
     }}>
     <div style={{ 
       display: 'flex', 
@@ -598,44 +1006,79 @@ function Graph() {
         fontWeight: '600',
         marginBottom: '10px'
       }}>
-        Telusur Jejak Produk Halal
+        Trace Halal
       </h1>
-      <button
-        onClick={() =>
-          generatePdfReport({
-            raws,
-            filteredRaws,
-            productIngredientMap,
-            perusahaanMap,
-            selectedIngredient,
-            filteredIngredientList,
-            selectedPembina,
-            startDate,
-            endDate,
-            categorizedIngredients,
-            loggedInUser: userEmail,
-          })
-        }
-        style={{
-          backgroundColor: '#6c3bb5',
-          color: 'white',
-          padding: '10px 18px',
-          fontWeight: '600',
-          border: 'none',
-          borderRadius: '8px',
-          boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-          cursor: 'pointer'
-        }}
-      >
-        Download Report PDF
-      </button>
-      {isDrilldownMode && (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+        <button
+          disabled={isLoading}
+          onClick={() =>
+            generatePdfReport({
+              raws: isDateFiltered ? batchRaws : raws,
+              filteredRaws,
+              productIngredientMap,
+              perusahaanMap,
+              selectedIngredient,
+              filteredIngredientList,
+              selectedPembina,
+              startDate,
+              endDate,
+              categorizedIngredients,
+              loggedInUser: userEmail,
+            })
+          }
+          style={{
+            backgroundColor: '#6c3bb5',
+            color: 'white',
+            padding: '10px 18px',
+            fontWeight: '600',
+            border: 'none',
+            borderRadius: '8px',
+            boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+            cursor: 'pointer',
+            width: 'fit-content'
+          }}
+        >
+          Download Report PDF
+        </button>
+
+        <button
+          disabled={isLoading}
+          onClick={() => {
+            const newWindow = window.open('', '_blank');
+            const stateData = {
+              raws: isDateFiltered ? batchRaws : raws,
+              perusahaanMap,
+              productIngredientMap,
+              filteredRaws,
+            };
+            newWindow.localStorage.setItem('statisticsState', JSON.stringify(stateData));
+            newWindow.location.href = '/statistics';
+          }}
+          style={{
+            marginTop: '10px',
+            backgroundColor: '#6c3bb5',
+            color: 'white',
+            padding: '10px 18px',
+            fontWeight: '600',
+            border: 'none',
+            borderRadius: '8px',
+            boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+            cursor: 'pointer',
+            width: 'fit-content'
+          }}
+        >
+          Lihat Statistik Jejak
+        </button>
+      </div>
+      {/* {isDrilldownMode && (
         <button
           onClick={() => {
             setIsDrilldownMode(false);
             setDrilldownNodeId(null);
           }}
           style={{
+            top: 10,
+            right: 10,
             marginLeft: '10px',
             backgroundColor: '#6c757d',
             color: 'white',
@@ -643,11 +1086,13 @@ function Graph() {
             border: 'none',
             borderRadius: '6px',
             cursor: 'pointer',
+            width: 'fit-content',
+            zIndex: 1000,
           }}
         >
           Kembali ke Filter
         </button>
-      )}
+      )} */}
     </div>
 
       {/* <pre>
@@ -664,8 +1109,9 @@ function Graph() {
             marginRight: '8px'
           }}
           htmlFor="ingredient-search"
-        >Filter by Category or Ingredient:</label>
+        >Kategori Bahan Baku:</label>
         <input
+          disabled={isLoading}
           id="ingredient-search"
           type="text"
           placeholder="Search category..."
@@ -791,7 +1237,9 @@ function Graph() {
             )}
           </div>
         )}
-        <button onClick={() => {
+        <button 
+        disabled={isLoading}
+        onClick={() => {
             setFilteredIngredientList([]);
             setSelectedIngredient(null);
             setSearchTerm('');
@@ -809,9 +1257,10 @@ function Graph() {
           marginRight: '8px'
         }}
       >
-        Filter by Provinsi:
+        Provinsi:
       </label>
       <select
+        disabled={isLoading}
         value={selectedProvince}
         onChange={(e) => {
           const val = e.target.value;
@@ -842,9 +1291,10 @@ function Graph() {
           }}
         htmlFor="pembina-select"
         >
-          Filter by Pembina:
+          Pembina:
         </label>
         <select
+          disabled={isLoading}
           id="pembina-select"
           onChange={(e) => {
             const val = e.target.value;
@@ -876,15 +1326,12 @@ function Graph() {
             marginRight: '8px'
           }}
         >
-        Filter by Date:
+        Tanggal Batch Produksi:
         </label>
         <input
           type="date"
-          value={startDate}
-          onChange={(e) => {
-            const val = e.target.value;
-            exitDrilldownAnd(() => setStartDate(val));
-          }}
+          value={pendingStartDate}
+          onChange={(e) => setPendingStartDate(e.target.value)}
           style={{
             padding: '10px',
             borderRadius: '6px',
@@ -896,11 +1343,8 @@ function Graph() {
         />
         <input
           type="date"
-          value={endDate}
-          onChange={(e) => {
-            const val = e.target.value;
-            exitDrilldownAnd(() => setEndDate(val));
-          }}
+          value={pendingEndDate}
+          onChange={(e) => setPendingEndDate(e.target.value)}
           style={{
             padding: '10px',
             borderRadius: '6px',
@@ -910,8 +1354,55 @@ function Graph() {
             fontSize: '14px'
           }}
         />
+        <button
+          onClick={() => {
+            if (pendingStartDate && pendingEndDate) {
+              exitDrilldownAnd(() => {
+                setStartDate(pendingStartDate);
+                setEndDate(pendingEndDate);
+              });
+            }
+          }}
+          disabled={!pendingStartDate || !pendingEndDate || isLoading}
+          style={{
+            marginLeft: '10px',
+            padding: '10px',
+            borderRadius: '6px',
+            backgroundColor: '#5e2ca5',
+            color: 'white',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            border: 'none'
+          }}
+        >
+          Cari
+        </button>
+        <button
+          onClick={() => {
+            // Reset all date-related states
+            exitDrilldownAnd(() => {
+              setStartDate('');
+              setEndDate('');
+              setPendingStartDate('');
+              setPendingEndDate('');
+              setIsDateFiltered(false);
+            });
+          }}
+          disabled={isLoading}
+          style={{
+            padding: '6px 12px',
+            borderRadius: '5px',
+            border: '1px solid #ccc',
+            backgroundColor: '#5e2ca5',
+            color: 'white',
+            cursor: 'pointer',
+          }}
+        >
+          Reset
+        </button>
       </div>
 
+      <div style={{ position: 'relative' }}>
       {cytoscapeGraph}
 
       {isLoading && (
@@ -954,6 +1445,30 @@ function Graph() {
         </div>
       )}
 
+      {isDrilldownMode && (
+        <button
+          onClick={() => {
+            setIsDrilldownMode(false);
+            setDrilldownNodeId(null);
+          }}
+          style={{
+            position: 'absolute',
+            top: 10,
+            right: 10,
+            backgroundColor: '#6c757d',
+            color: 'white',
+            padding: '8px 16px',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            zIndex: 1000,
+          }}
+        >
+          Kembali ke Filter
+        </button>
+      )}
+    </div>
+
       {selectedNode && (
         <div
           style={{
@@ -973,9 +1488,9 @@ function Graph() {
             color: '#333'
           }}
         >
-          <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px' }}>Node Info</h3>
+          <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px' }}>Profil Detail</h3>
           <p><strong>ID:</strong> {selectedNode.id}</p>
-          <p><strong>Label:</strong> {selectedNode.label}</p>
+          <p><strong>Nama:</strong> {selectedNode.label}</p>
         
           {selectedNode.extra && (
             <>
@@ -998,29 +1513,39 @@ function Graph() {
                 <p><strong>Bahan:</strong> {selectedNode.extra.bahan.join(', ')}</p>
               )}
               {!isDrilldownMode && (
-                <button
-                   onClick={() => {
-                    exitDrilldownAnd(() => {
-                      setDrilldownNodeId(selectedNode.id);
-                      setIsDrilldownMode(true);
-                      setSelectedNode(null);
-                    });
-                  }}
-                  style={{
-                    marginTop: '8px',
-                    backgroundColor: '#17a2b8',
-                    color: 'white',
-                    padding: '6px 12px',
-                    border: 'none',
-                    borderRadius: '5px',
-                    cursor: 'pointer',
-                    width: '100%',
-                  }}
-                >
-                  Tampilkan Jejak Lengkap
-                </button>
+                (() => {
+                  const isEntity = selectedNode.extra?.jenis_perusahaan;
+                  const isProduct = selectedNode.extra?.bahan;
+                  const isJuru = selectedNode.id?.startsWith('juru_sembelih_');
+                  if (isEntity || isJuru || isProduct) {
+                    return (
+                      <button
+                        disabled={isLoading}
+                        onClick={() => {
+                          exitDrilldownAnd(() => {
+                            setDrilldownNodeId(selectedNode.id);
+                            setIsDrilldownMode(true);
+                            setSelectedNode(null);
+                          });
+                        }}
+                        style={{
+                          marginTop: '8px',
+                          backgroundColor: '#0074D9',
+                          color: 'white',
+                          padding: '6px 12px',
+                          border: 'none',
+                          borderRadius: '5px',
+                          cursor: 'pointer',
+                          width: '100%',
+                        }}
+                      >
+                        Tampilkan Jejak Lengkap
+                      </button>
+                    );
+                  }
+                  return null;
+                })()
               )}
-
             </>
           )}
         

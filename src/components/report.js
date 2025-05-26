@@ -90,9 +90,9 @@ export const generatePdfReport = ({
   doc.setTextColor('#000000');
   doc.text(`Tanggal Generate: ${date.toLocaleString()}`, 40, 60);
   doc.text(`Login Sebagai: ${loggedInUser || '-'}`, 40, 75);
-  doc.text(`Filter - Kategori/Subkategori: ${filterText}`, 40, 90);
-  doc.text(`Filter - Pembina: ${pembinaText}`, 40, 105);
-  doc.text(`Filter - Tanggal: ${dateText}`, 40, 120);
+  doc.text(`Kategori Bahan: ${filterText}`, 40, 90);
+  doc.text(`Pembina: ${pembinaText}`, 40, 105);
+  doc.text(`Tanggal Batch Produksi: ${dateText}`, 40, 120);
 
   // Statistik Section
   doc.setFontSize(12);
@@ -101,7 +101,7 @@ export const generatePdfReport = ({
 
   const statistikRows = [
     ['Total Produk', totalProduk],
-    ['Total Bahan Unik', totalUniqueBahan],
+    ['Total Jenis Bahan', totalUniqueBahan],
     ['Total Perusahaan Terlibat', totalUniquePerusahaan],
   ];
 
@@ -130,6 +130,13 @@ export const generatePdfReport = ({
 
   const rphToPelakuUsahaMap = {};
 
+  // Object.values(perusahaanMap).forEach((company) => {
+  //   if (company.jenis_usaha === 'rph') {
+  //     rphToPelakuUsahaMap[company.nama_perusahaan] = new Set();
+  //   }
+  // });
+
+
   Object.entries(filteredRaws).forEach(([productID, track]) => {
     for (let i = 0; i < track.length - 1; i++) {
       const fromName = track[i]?.toLowerCase().trim();
@@ -138,12 +145,15 @@ export const generatePdfReport = ({
       const from = nameToCompany[fromName];
       const to = nameToCompany[toName];
 
-      if (from?.jenis_usaha === 'pelaku_usaha' && to?.jenis_usaha === 'rph') {
+      if (to?.jenis_usaha === 'rph' && from?.nama_perusahaan) {
         if (!rphToPelakuUsahaMap[to.nama_perusahaan]) {
           rphToPelakuUsahaMap[to.nama_perusahaan] = new Set();
         }
         rphToPelakuUsahaMap[to.nama_perusahaan].add(from.nama_perusahaan);
       }
+      // if (to?.jenis_usaha === 'rph' && from?.nama_perusahaan) {
+      //   rphToPelakuUsahaMap[to.nama_perusahaan].add(from.nama_perusahaan);
+      // }
     }
     console.log("✅ RPH to Pelaku Map:", Object.fromEntries(
       Object.entries(rphToPelakuUsahaMap).map(([k, v]) => [k, Array.from(v)])
@@ -158,14 +168,14 @@ export const generatePdfReport = ({
 
   autoTable(doc, {
     startY: doc.lastAutoTable.finalY + 30,
-    head: [['No.', 'Nama RPH', 'Jumlah Pelaku Usaha']],
+    head: [['No.', 'Nama RPH', 'Jumlah Pelanggan']],
     body: rphRows,
     theme: 'grid',
     headStyles: { fillColor: [108, 59, 181] },
     columnStyles: {
       0: { cellWidth: 30 },
       1: { cellWidth: 100 },
-      2: { cellWidth: 100, halign: 'right' },
+      2: { cellWidth: 120, halign: 'right' },
     },
   });
 
