@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { generatePdfReport } from './report';
 import { useNavigate } from 'react-router-dom';
+import GraphGuide from '../components/guide';
 
 function Graph() {
   const { token, userEmail } = useAuth();
@@ -38,10 +39,17 @@ function Graph() {
   const hasFetchedBatchProduct = useRef(false);
   const [isDateFiltered, setIsDateFiltered] = useState(false);
   const [batchRaws, setBatchRaws] = useState({});
+  const [showGuide, setShowGuide] = useState(false);
 
   const [pendingStartDate, setPendingStartDate] = useState('');
   const [pendingEndDate, setPendingEndDate] = useState('');
   const [pendingCategoryFilter, setPendingCategoryFilter] = useState(null);
+
+  useEffect(() => {
+    if (!token) {
+      navigate('/'); // redirect to login
+    }
+  }, [token]);
 
   const INDONESIAN_PROVINCES = [
         "Aceh", "Sumatera Utara", "Sumatera Barat", "Riau", "Kepulauan Riau", "Jambi",
@@ -1008,7 +1016,7 @@ function Graph() {
       }}>
         Trace Halal
       </h1>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-end' }}>
         <button
           disabled={isLoading}
           onClick={() =>
@@ -1048,13 +1056,15 @@ function Graph() {
             const stateData = {
               raws: isDateFiltered ? batchRaws : raws,
               perusahaanMap,
-              productIngredientMap,
+              product_ingredient: isDateFiltered ? productIngredientMap_batchRaws : productIngredientMap,
               filteredRaws,
+              categorizedIngredients
             };
             newWindow.localStorage.setItem('statisticsState', JSON.stringify(stateData));
             newWindow.location.href = '/statistics';
           }}
           style={{
+            marginLeft: '10px',
             marginTop: '10px',
             backgroundColor: '#6c3bb5',
             color: 'white',
@@ -1067,7 +1077,13 @@ function Graph() {
             width: 'fit-content'
           }}
         >
-          Lihat Statistik Jejak
+          Lihat Statistik
+        </button>
+        <button
+          onClick={() => setShowGuide(true)}
+          className="ml-3 bg-yellow-400 text-gray-800 px-4 py-2 rounded-md font-semibold shadow hover:bg-yellow-500"
+        >
+          Panduan Penggunaan
         </button>
       </div>
       {/* {isDrilldownMode && (
@@ -1238,13 +1254,24 @@ function Graph() {
           </div>
         )}
         <button 
-        disabled={isLoading}
-        onClick={() => {
-            setFilteredIngredientList([]);
-            setSelectedIngredient(null);
-            setSearchTerm('');
-            }}>
-            Reset Filter
+          disabled={isLoading}
+          style={{
+            marginLeft: '10px',
+            padding: '6px 12px',
+            borderRadius: '5px',
+            border: '1px solid #ccc',
+            backgroundColor: '#5e2ca5',
+            color: 'white',
+            cursor: 'pointer',
+          }}
+          onClick={() => {
+            exitDrilldownAnd(() => {
+              setFilteredIngredientList([]);
+              setSelectedIngredient(null);
+              setSearchTerm('');
+            });
+          }}>
+            Reset
         </button>
 
       </div>
@@ -1366,13 +1393,12 @@ function Graph() {
           disabled={!pendingStartDate || !pendingEndDate || isLoading}
           style={{
             marginLeft: '10px',
-            padding: '10px',
-            borderRadius: '6px',
+            padding: '6px 12px',
+            borderRadius: '5px',
+            border: '1px solid #ccc',
             backgroundColor: '#5e2ca5',
             color: 'white',
-            fontWeight: 'bold',
             cursor: 'pointer',
-            border: 'none'
           }}
         >
           Cari
@@ -1390,6 +1416,7 @@ function Graph() {
           }}
           disabled={isLoading}
           style={{
+            marginLeft: '10px',
             padding: '6px 12px',
             borderRadius: '5px',
             border: '1px solid #ccc',
@@ -1539,7 +1566,7 @@ function Graph() {
                           width: '100%',
                         }}
                       >
-                        Tampilkan Jejak Lengkap
+                        Tampilkan Detail Trace
                       </button>
                     );
                   }
@@ -1566,7 +1593,7 @@ function Graph() {
           </button>
         </div>
       )}
-
+      {showGuide && <GraphGuide onClose={() => setShowGuide(false)} />}
     </div>
   );
 }

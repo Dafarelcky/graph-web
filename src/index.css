@@ -22,13 +22,21 @@ body {
 }
 
 table {
-  @apply w-full text-left border-collapse;
+  @apply w-full text-left border-collapse rounded-lg overflow-hidden shadow-md;
 }
 
 th {
-  @apply bg-gray-200 p-3 text-sm font-semibold;
+  @apply bg-[#5f259f] text-white p-3 text-sm font-semibold border-r border-white last:border-r-0;
 }
 
 td {
-  @apply p-3 border-b border-gray-300;
+  @apply p-3 border-b border-gray-200 text-sm border-r border-gray-300 last:border-r-0;
+}
+
+tr:nth-child(even) td {
+  @apply bg-gray-50;
+}
+
+tr:hover td {
+  @apply bg-gray-100;
 }

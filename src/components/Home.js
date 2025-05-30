@@ -1,128 +1,64 @@
-import React, { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import axios from 'axios';
+import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext'; 
+import { useNavigate } from 'react-router-dom';
 
-const ProductTable = () => {
-  const { token } = useAuth();
-  const [products, setProducts] = useState([]);
-  const [perusahaan, setPerusahaan] = useState([]);
+const Login = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const { login } = useAuth();
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (token) {
-        try {
-          const response = await axios.get('https://riset.its.ac.id/teratai-dev/api/v1/perusahaan', {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
-  
-          const allCompanies = response.data.result.perusahaan;
-  
-          // ✅ Filter and map pembina companies
-          const pembinaCompanies = allCompanies
-            .filter(company => company.jenis_usaha?.toLowerCase() === 'pembina')
-            .map(company => ({
-              _id: company._id,
-              nama_perusahaan: company.nama_perusahaan,
-              jenis_usaha: company.jenis_usaha,
-            }));
-  
-          console.log("📦 Pembina Companies:", pembinaCompanies);
-  
-          // Optional: store in state
-          setPerusahaan(pembinaCompanies); // or use a new state like setPembinaPerusahaan if needed
-  
-        } catch (error) {
-          console.error('Failed to fetch data:', error);
-        }
-      }
-    };
-  
-    fetchData();
-  }, [token]);
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    const result = await login(email, password);
 
-  useEffect(() => {
-    // console.log('Token:', token);
-    const fetchData = async () => {
-      if (token) {
-        try {
-          const response = await axios.get('https://riset.its.ac.id/teratai-dev/api/v1/produk-master', {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
-          // console.log('Data fetched successfully:', response.data.result.produkMaster);
-          setProducts(response.data.result.produkMaster);
-        } catch (error) {
-          console.error('Failed to fetch data:', error);
-        }
-      }
-    };
-
-    fetchData();
-  }, [token]);
+    if (result.success) {
+      navigate('/graph');
+    } else {
+      alert('Login failed. Please check your credentials.');
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      {/* Top Bar */}
-      <div className="flex justify-end p-4">
-        <button className="bg-gray-200 px-4 py-2 rounded-md text-gray-700">
-          Admin TokoAio
-        </button>
-      </div>
-
-      {/* Page Title */}
-      <h1 className="text-2xl font-bold mb-4">TABEL PRODUK</h1>
-
-      {/* Search & Filter Section */}
-      <div className="bg-gray-200 p-4 rounded-lg flex gap-4 mb-4">
-        <input
-          type="text"
-          placeholder="Cari..."
-          className="w-1/2 p-2 rounded-md border border-gray-300"
-        />
-        <select className="w-1/3 p-2 rounded-md border border-gray-300">
-          <option>Filter By: Jenis Produk</option>
-          <option>Food</option>
-          <option>Drink</option>
-        </select>
-      </div>
-
-      {/* Product Table */}
-      <div className="bg-white rounded-lg shadow-md p-4">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="text-left p-2">ID HALAL</th>
-              <th className="text-left p-2">NAMA PRODUK</th>
-              <th className="text-left p-2">NAMA PERUSAHAAN</th>
-              <th className="text-left p-2">JENIS USAHA</th>
-              <th className="text-left p-2">TANGGAL DIPERBARUI</th>
-            </tr>
-          </thead>
-          <tbody>
-            {products.map((product, index) => (
-              <tr key={index} className="border-b">
-                <td className="p-2">{product.id_halal}</td>
-                <td className="p-2">
-                  <a 
-                    href={`/${product.id_halal}`}
-                    className="text-blue-500 hover:underline"
-                  >
-                    {product.nama_produk}
-                  </a>
-                </td>
-                <td className="p-2">{product.nama_perusahaan}</td>
-                <td className="p-2">{product.jenis_usaha}</td>
-                <td className="p-2">{product.diperbarui_pada}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+      <div className="bg-white shadow-lg rounded-xl p-8 w-full max-w-md">
+        <h2 className="text-2xl font-bold mb-6 text-center text-[#5f259f]">Login to Dashboard</h2>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#5f259f]"
+              placeholder="you@example.com"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#5f259f]"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-[#5f259f] hover:bg-[#4e1f88] text-white font-semibold py-2 rounded-md transition"
+          >
+            Login
+          </button>
+        </form>
+        <p className="text-sm text-center text-gray-500 mt-6">
+          © {new Date().getFullYear()} Halal Traceability. All rights reserved.
+        </p>
       </div>
     </div>
   );
 };
 
-export default ProductTable;
+export default Login;

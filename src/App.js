@@ -22,8 +22,8 @@ function App() {
             {/* Main Content */}
             <div className="col-md-9 col-lg-10 p-4">
               <Routes>
-                <Route path="/" element={<Graph />} />
-                {/* <Route path="/graph" element={<Graph />} /> */}
+                <Route path="/" element={<Home />} />
+                <Route path="/graph" element={<Graph />} />
                 <Route path="/:id" element={<ProductDetail />} />
                 <Route path="/statistics" element={<StatisticsPage />} />
               </Routes>
