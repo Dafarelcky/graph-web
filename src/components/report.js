@@ -41,23 +41,25 @@ export const generatePdfReport = ({
   const allIngredients = new Set();
   const perusahaanTypeMap = {};
 
-  Object.entries(filteredRaws).forEach(([productID]) => {
-    const ingredients = productIngredientMap[productID] || [];
+  Object.entries(filteredRaws).forEach(([productID, value]) => {
+    const ingredients =
+      Array.isArray(value) ? productIngredientMap[productID] || [] :
+      value?.matchedIngredients || productIngredientMap[productID] || [];
+
     ingredients.forEach((bahan) => allIngredients.add(bahan));
 
-    const track = filteredRaws[productID];
-    if (Array.isArray(track)) {
-      track.forEach((namaPerusahaan) => {
-        const found = Object.values(perusahaanMap).find(
-          (p) => p.nama_perusahaan === namaPerusahaan
-        );
-        if (found) {
-          const jenis = found.jenis_usaha || 'Lainnya';
-          if (!perusahaanTypeMap[jenis]) perusahaanTypeMap[jenis] = new Set();
-          perusahaanTypeMap[jenis].add(found._id);
-        }
-      });
-    }
+    const track = Array.isArray(value) ? value : value?.track || [];
+
+    track.forEach((namaPerusahaan) => {
+      const found = Object.values(perusahaanMap).find(
+        (p) => p.nama_perusahaan === namaPerusahaan
+      );
+      if (found) {
+        const jenis = found.jenis_usaha || 'Lainnya';
+        if (!perusahaanTypeMap[jenis]) perusahaanTypeMap[jenis] = new Set();
+        perusahaanTypeMap[jenis].add(found._id);
+      }
+    });
   });
 
   const perusahaanCounts = {};
@@ -69,15 +71,16 @@ export const generatePdfReport = ({
 
   const totalUniquePerusahaan = new Set(
     Object.entries(filteredRaws)
-      .map(([_, track]) =>
-        track
+      .map(([_, value]) => {
+        const track = Array.isArray(value) ? value : value?.track || [];
+        return track
           .map((name) =>
             Object.values(perusahaanMap).find((p) => p.nama_perusahaan === name)
               ? name
               : null
           )
-          .filter(Boolean)
-      )
+          .filter(Boolean);
+      })
       .flat()
   ).size;
 
@@ -137,7 +140,9 @@ export const generatePdfReport = ({
   // });
 
 
-  Object.entries(filteredRaws).forEach(([productID, track]) => {
+  Object.entries(filteredRaws).forEach(([productID, value]) => {
+    const track = Array.isArray(value) ? value : value?.track || [];
+
     for (let i = 0; i < track.length - 1; i++) {
       const fromName = track[i]?.toLowerCase().trim();
       const toName = track[i + 1]?.toLowerCase().trim();
@@ -151,14 +156,9 @@ export const generatePdfReport = ({
         }
         rphToPelakuUsahaMap[to.nama_perusahaan].add(from.nama_perusahaan);
       }
-      // if (to?.jenis_usaha === 'rph' && from?.nama_perusahaan) {
-      //   rphToPelakuUsahaMap[to.nama_perusahaan].add(from.nama_perusahaan);
-      // }
     }
-    console.log("✅ RPH to Pelaku Map:", Object.fromEntries(
-      Object.entries(rphToPelakuUsahaMap).map(([k, v]) => [k, Array.from(v)])
-    ));
   });
+
 
   const rphRows = Object.entries(rphToPelakuUsahaMap).map(([rphName, pelakuSet], index) => [
     index + 1,
@@ -181,22 +181,28 @@ export const generatePdfReport = ({
 
   // Prepare and sort produkRows
   const produkRows = Object.entries(filteredRaws)
-    .map(([productID, track]) => {
-      const info = productIngredientMap[productID] || [];
-      const perusahaan = perusahaanMap[Object.keys(perusahaanMap).find((id) =>
-        perusahaanMap[id]?.nama_perusahaan === track[0]
-      )];
+  .map(([productID, trackObj]) => {
+    const info = 
+      Array.isArray(trackObj) // handle legacy flat array
+        ? productIngredientMap[productID] || []
+        : trackObj?.matchedIngredients || productIngredientMap[productID] || [];
 
-      return {
-        idHalal: productID,
-        nama: (raws[productID]?.nama_produk || '-').toUpperCase(),
-        perusahaan: perusahaan?.nama_perusahaan || '-',
-        bahan: info.join(', ') || '-',
-        kota: raws[productID]?.kota || '-',
-        provinsi: raws[productID]?.provinsi || '-',
-      };
-    })
-    .sort((a, b) => a.bahan.localeCompare(b.bahan));
+    const track = Array.isArray(trackObj) ? trackObj : trackObj?.track || [];
+
+    const perusahaan = perusahaanMap[Object.keys(perusahaanMap).find((id) =>
+      perusahaanMap[id]?.nama_perusahaan === track[0]
+    )];
+
+    return {
+      idHalal: productID,
+      nama: (raws[productID]?.nama_produk || '-').toUpperCase(),
+      perusahaan: perusahaan?.nama_perusahaan || '-',
+      bahan: info.join(', ') || '-',
+      kota: raws[productID]?.kota || '-',
+      provinsi: raws[productID]?.provinsi || '-',
+    };
+  })
+  .sort((a, b) => a.bahan.localeCompare(b.bahan));
 
   const finalProdukRows = produkRows.map((item, index) => [
     index + 1,

@@ -15,12 +15,12 @@ function App() {
         <div className="container-fluid">
           <div className="row">
             {/* Sidebar */}
-            <div className="col-md-3 col-lg-2 bg-dark text-white min-vh-100">
+            {/* <div className="col-md-3 col-lg-2 bg-dark text-white min-vh-100">
               <Sidebar />
-            </div>
+            </div> */}
             
             {/* Main Content */}
-            <div className="col-md-9 col-lg-10 p-4">
+            <div className="p-4">
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/graph" element={<Graph />} />
