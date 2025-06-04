@@ -1008,14 +1008,21 @@ function Graph() {
       alignItems: 'center', 
       marginBottom: '20px' 
     }}>
-      <h1 style={{
-        color: '#5e2ca5',
-        fontSize: '28px',
-        fontWeight: '600',
-        marginBottom: '10px'
-      }}>
-        Trace Halal
-      </h1>
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <img
+          src="/images/logo.png"
+          alt="Logo"
+          style={{ height: '40px', width: '40px', objectFit: 'contain' }}
+        />
+        <h1 style={{
+          color: '#5e2ca5',
+          fontSize: '28px',
+          fontWeight: '600',
+          marginBottom: '10px'
+        }}>
+          Trace Halal
+        </h1>
+      </div>
       <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-end' }}>
         <button
           disabled={isLoading}
