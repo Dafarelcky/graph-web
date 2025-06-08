@@ -15,7 +15,7 @@ function Graph() {
   const [selectedPembina, setSelectedPembina] = useState('');
   const [productIngredientMap, setProductIngredientMap] = useState({});
   const [productIngredientMap_batchRaws, setProductIngredientMap_batchRaws] = useState({});
-  const [perusahaan, setPerusahaan] = useState([]);
+  const [pembina, setPembina] = useState([]);
   const [cyInstance, setCyInstance] = useState(null);
   const [graphKey, setGraphKey] = useState(0);
   const [perusahaanMap, setPerusahaanMap] = useState({});
@@ -140,7 +140,7 @@ function Graph() {
           console.log("📦 Pembina Companies:", pembinaCompanies);
   
           // Optional: store in state
-          setPerusahaan(pembinaCompanies); // or use a new state like setPembinaPerusahaan if needed
+          setPembina(pembinaCompanies); // or use a new state like setPembinaPerusahaan if needed
 
           const companyMap = {};
           allCompanies.forEach(c => {
@@ -243,11 +243,11 @@ function Graph() {
         }
       }
       setProductIngredientMap(product_ingredient);
-      Object.entries(product_ingredient).forEach(([productID, ingredients]) => {
-        if (ingredients.length > 1) {
-          console.log(`📦 Product with multiple ingredients: ${productID}`, ingredients);
-        }
-      });
+      // Object.entries(product_ingredient).forEach(([productID, ingredients]) => {
+      //   if (ingredients.length > 1) {
+      //     console.log(`📦 Product with multiple ingredients: ${productID}`, ingredients);
+      //   }
+      // });
       setRaws(resultDict);
       setIsLoading(false); 
     };
@@ -418,29 +418,20 @@ function Graph() {
     const elements = [];
     const addedNodes = new Set();
     
-
     for (const productID in data) {
-      // if (raws[productID]?.track && batchRaws[productID]?.track) {
-      //   console.log('🟣 RAW track:', productID, raws[productID].track);
-      //   console.log('🟢 BATCH track:', productID, batchRaws[productID].track);
-      // }
-      
-      // const chain = data[productID];
-      // if (!chain || chain.length === 0) continue;
-
       const rawItem = data[productID];
       const chain = Array.isArray(rawItem) ? rawItem : rawItem?.track;
 
       if (!Array.isArray(chain) || chain.length === 0) continue;
 
       const productData = (isDateFiltered ? batchRaws : raws)[productID];
-      const source = chain[0]; // usually "Tera Abadi"
+      const source = chain[0]; 
       const rest = chain.slice(1);
 
       const perusahaanInfo = perusahaanMap[productData.id_perusahaan];
       const isPelaku = perusahaanInfo?.jenis_usaha?.toLowerCase() === 'pelaku_usaha';
 
-      // 🟠 Pelaku node
+      // Pelaku node
       if (!addedNodes.has(productData.id_perusahaan)) {
         elements.push({
           data: { id: productData.id_perusahaan, label: source },
@@ -449,7 +440,7 @@ function Graph() {
         addedNodes.add(productData.id_perusahaan);
       }
 
-      // 🟢 Product node
+      // Product node
       if (!addedNodes.has(productID)) {
         elements.push({
           data: { id: productID, label: productData.nama_produk },
@@ -458,7 +449,7 @@ function Graph() {
         addedNodes.add(productID);
       }
 
-      // 🧠 Edge: pelaku → product
+      // Edge: pelaku → product
       elements.push({
         data: {
           id: `${productData.id_perusahaan}_${productID}`,
@@ -466,8 +457,6 @@ function Graph() {
           target: productID,
         },
       });
-
-      // ✅ Add Ingredient nodes + tracks (only in drilldown mode and multi-ingredient)
       // const ingredients = productIngredientMap[productID] || [];
       const ingredientTracks = productData.ingredientTracks || {};
       const ingredients = Object.keys(ingredientTracks);
@@ -506,23 +495,12 @@ function Graph() {
             });
           }
 
-          // Shared trace rendering logic
-          // const drilldownName = drilldownNodeId
-          //   ? perusahaanMap[drilldownNodeId]?.nama_perusahaan || drilldownNodeId.replace('juru_sembelih_', '')
-          //   : null;
-
-          // let shouldRender = !isDrilldownMode; // always true outside drilldown
-          // Only render this ingredient track if it includes the drilldown node
           const drilldownName = drilldownNodeId
             ? perusahaanMap[drilldownNodeId]?.nama_perusahaan || drilldownNodeId.replace('juru_sembelih_', '')
             : null;
 
           // Skip this entire ingredient if it doesn't go through drilldown node
           const isDrillingFromProduct = drilldownNodeId === productID;
-
-          // if (isDrilldownMode && drilldownName && !ingredientTrack.includes(drilldownName) && !isDrillingFromProduct) {
-          //   continue;
-          // }
 
           const productTrack = productData.track || [];
           const drillIsInProductTrack =
@@ -536,23 +514,10 @@ function Graph() {
             !isDrillingFromProduct &&
             !drillIsInProductTrack
           ) {
-            continue; // skip only if drilldown not in ingredient OR product path
+            continue; 
           }
 
-          // Now render the entire track as usual:
-          // let prev = isDrilldownMode
-          //   ? `bahan_${ing}_${productID}`
-          //   : productID;
-
           for (const name of ingredientTrack) {
-            // if (isDrilldownMode && drilldownName && !shouldRender) {
-            //   if (name === drilldownName) {
-            //     shouldRender = true;
-            //   } else {
-            //     continue; // skip until drilldown match
-            //   }
-            // }
-
              // now start rendering nodes after the drilldown node appears in the path
             const company = Object.values(perusahaanMap).find(c => c.nama_perusahaan === name);
             const nodeId = company?._id || `juru_sembelih_${name}`;
@@ -578,7 +543,6 @@ function Graph() {
         }
       }
 
-      // 🧱 Add standard trace chain (if not in drilldown, or 1-ingredient only)
       // const numIngredients = productIngredientMap[productID]?.length || 0;
       const numIngredients = ingredients.length;
       if (!isDrilldownMode || numIngredients <= 1) {
@@ -615,8 +579,6 @@ function Graph() {
     if (pendingCategoryFilter) {
       const ingredients = categorizedIngredients[pendingCategoryFilter];
       if (ingredients?.length) {
-        // console.log("⏳ Applying filter for category:", pendingCategoryFilter);
-        // console.log("➡️ Final ingredients being set:", ingredients);
         setFilteredIngredientList([...ingredients]);
       } else {
         setFilteredIngredientList([]);
@@ -681,18 +643,9 @@ function Graph() {
 
       return filtered;
     }
-
-
-
-    // console.log("🧮 Filtering with list:", filteredIngredientList);
-    // console.log('🔍 Filtering raws using:', {
-    //   selectedIngredient,
-    //   filteredIngredientList,
-    // });
   
     for (const [productID, productData] of Object.entries(sourceData)) {
       let matchesIngredient = true;
-
       if (selectedIngredient) {
         matchesIngredient = productIngredientMap[productID]?.includes(selectedIngredient);
       } else if (filteredIngredientList.length > 0) {
@@ -702,12 +655,10 @@ function Graph() {
       }
 
       const matchesPembina = !selectedPembina || productData.id_pembina === selectedPembina;
-      const matchesProvince =
-        !selectedProvince ||
-        (sourceData[productID]?.provinsi === selectedProvince);
+      const matchesProvince = !selectedProvince || (sourceData[productID]?.provinsi === selectedProvince);
   
-      const updatedAt = productData.dibuat_pada;
-      const updatedDate = updatedAt ? new Date(updatedAt) : null;
+      const createdAt = productData.dibuat_pada;
+      const updatedDate = createdAt ? new Date(createdAt) : null;
       const inDateRange =
         (!startDate || (updatedDate && updatedDate >= new Date(startDate))) &&
         (!endDate || (updatedDate && updatedDate <= new Date(endDate)));
@@ -743,8 +694,6 @@ function Graph() {
 
   useEffect(() => {
     const els = generateElements(filteredRaws);
-    // console.log('✅ FilteredRaws:', filteredRaws);
-    // console.log('✅ Graph elements regenerated:', els);
     setElements(els);
     setGraphKey(prev => prev + 1); // remount
   }, [filteredRaws]);
@@ -782,25 +731,15 @@ function Graph() {
       cy={(cy) => {
   
         cy.on('render', () => {
-        //   <pre style={{ fontSize: '12px' }}>
-        //     Selected Ingredient: {JSON.stringify(selectedIngredient)}{"\n"}
-        //     Filtered Ingredient List: {JSON.stringify(filteredIngredientList)}
-        //   </pre>
           cy.container().style.backgroundColor = '#f0f4ff';
           cy.container().style.backgroundImage =
             'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'40\' height=\'40\' viewBox=\'0 0 40 40\'%3E%3Crect width=\'40\' height=\'40\' fill=\'none\' stroke=\'%23d0d7e4\' stroke-width=\'1\' /%3E%3C/svg%3E")';
           cy.container().style.backgroundSize = '40px 40px';
         });
   
-        setCyInstance(cy); // Save instance once
+        setCyInstance(cy); 
         cy.on('tap', 'node', (event) => {
           const node = event.target;
-          // const nodeData = node.data();
-          // setSelectedNode({
-          //   id: nodeData.id,
-          //   label: nodeData.label,
-          //   extra: nodeData.extra || null,
-          // });
           const pos = node.renderedPosition();
           const nodeId = node.id();
           const product = (isDateFiltered ? batchRaws : raws)[nodeId];
@@ -812,11 +751,15 @@ function Graph() {
           const x = Math.min(pos.x + container.left, window.innerWidth - 300);
           const y = Math.min(pos.y + container.top, window.innerHeight - 200);
         
-          // 🔴 First: remove all previous highlights
+          // First: remove all previous highlights
           cy.edges().removeClass('highlighted');
         
           if (product?.ingredientTracks && Object.keys(product.ingredientTracks).length > 0) {
             Object.entries(product.ingredientTracks).forEach(([ing, path]) => {
+              const ingredientNodeId = `bahan_${ing}_${nodeId}`;
+
+              const edgeToIngredient = cy.getElementById(`${nodeId}_${ingredientNodeId}`);
+              if (edgeToIngredient) edgeToIngredient.addClass('highlighted');
               let prev = `bahan_${ing}_${nodeId}`;
               
               path.forEach(currentName => {
@@ -837,7 +780,7 @@ function Graph() {
             });
           }
 
-          // 🟡 If node is an ingredient node
+          // If node is an ingredient node
           if (nodeId.startsWith('bahan_')) {
             const [_, ingName, productID] = nodeId.split('_');
 
@@ -861,10 +804,15 @@ function Graph() {
             }
           }
 
-          // 🔴 Highlight path from this node
+          // Highlight path from this node
           if (product?.track) {
             const track = product.track;
             let prev = nodeId;
+
+            const pelakuId = product.id_perusahaan;
+            const pelakuEdgeId = `${pelakuId}_${nodeId}`;
+            const pelakuEdge = cy.getElementById(pelakuEdgeId);
+            if (pelakuEdge) pelakuEdge.addClass('highlighted');
 
             for (let i = 1; i < track.length; i++) {
               const currentName = track[i];
@@ -965,8 +913,7 @@ function Graph() {
           selector: 'node.ingredient',
           style: {
             backgroundColor: '#FFD700',
-            shape: 'round-rectangle',
-            fontSize: 10
+            shape: 'round-rectangle'
           }
         },
         {
@@ -975,7 +922,7 @@ function Graph() {
             lineColor: '#FF4136',
             targetArrowColor: '#FF4136',
             targetArrowShape: 'triangle',
-            arrowScale: 2, // more prominent on highlight
+            arrowScale: 2,
             width: 4,
             curveStyle: 'bezier',
           },
@@ -995,12 +942,11 @@ function Graph() {
   const hoverTimeout = useRef(null);
   return (
     <div className="App" style={{
-      fontFamily: 'Poppins, sans-serif',
+      fontFamily: 'DM Sans, sans-serif',
       backgroundColor: '#f9f6fc',
       padding: '40px',
       minHeight: '100vh',
       color: '#333'
-      // position: 'relative'
     }}>
     <div style={{ 
       display: 'flex', 
@@ -1184,7 +1130,7 @@ function Graph() {
               borderRadius: '6px',
               overflow: 'hidden',
               boxShadow: '0 4px 10px rgba(0, 0, 0, 0.1)',
-              fontFamily: 'sans-serif',
+              fontFamily: 'DM Sans, sans-serif',
             }}
           >
             {/* Category List */}
@@ -1278,7 +1224,7 @@ function Graph() {
               setSearchTerm('');
             });
           }}>
-            Reset
+            Hapus
         </button>
 
       </div>
@@ -1345,7 +1291,7 @@ function Graph() {
           }}
         >
           <option value="">All Pembina</option>
-          {perusahaan.map((p) => (
+          {pembina.map((p) => (
             <option key={p._id} value={p._id}>
               {p.nama_perusahaan}
             </option>
@@ -1432,7 +1378,7 @@ function Graph() {
             cursor: 'pointer',
           }}
         >
-          Reset
+          Hapus
         </button>
       </div>
 

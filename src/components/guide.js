@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 const slides = [
   {
-    title: '📌 Apa itu Tampilan Graph?',
+    title: 'Apa itu Tampilan Graph?',
     content: 'Tampilan ini menunjukkan alur distribusi produk dari pelaku usaha hingga ke juru sembelih atau distributor lainnya.',
   },
   {
@@ -62,8 +62,12 @@ const GraphGuide = ({ onClose }) => {
   const { title, content, image, mode } = slides[index];
 
   return (
-    <div className="fixed top-0 left-0 w-full h-full bg-black bg-opacity-40 z-[2000] flex items-center justify-center ">
-      <div className="bg-white p-6 rounded-xl shadow-lg max-w-md w-full relative text-center font-sans">
+    <div className="fixed top-0 left-0 w-full h-full bg-[rgba(0,0,0,0.4)] z-[2000] flex items-center justify-center"
+      onClick={onClose}    
+    >
+      <div className="bg-white p-6 rounded-xl shadow-lg max-w-md w-full relative text-center font-sans"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           className="absolute top-2 right-3 text-gray-600 hover:text-red-500 text-lg"
           onClick={onClose}

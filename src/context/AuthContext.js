@@ -27,11 +27,10 @@ export const AuthProvider = ({ children }) => {
 
       localStorage.setItem('token', receivedToken);
       localStorage.setItem('email', email);
-      console.log('✅ Login successful');
 
       return { success: true };
     } catch (error) {
-      console.error('❌ Login failed:', error);
+      console.error('Login failed:', error);
       return { success: false, error };
     }
   };

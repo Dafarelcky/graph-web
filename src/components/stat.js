@@ -107,33 +107,33 @@ function StatisticsPage() {
       .custom-table th {
         padding: 12px !important;
         font-weight: 600;
-        font-family: 'Poppins', sans-serif;
+        font-family: 'DM Sans', sans-serif;
       }
 
       .custom-table td {
         padding: 10px;
-        font-family: 'Poppins', sans-serif;
+        font-family: 'DM Sans', sans-serif;
       }
     `}
   </style>
 
   return (
     <div style={{
-      fontFamily: 'Poppins, sans-serif',
+      fontFamily: 'DM Sans, sans-serif',
       backgroundColor: '#f9f6fc',
       padding: '40px',
       minHeight: '100vh',
       color: '#333'
     }}>
       <h2 style={{ color: '#6c3bb5', fontSize: '20px', marginBottom: '10px' }}>
-        🍽️ Jumlah Produk per Kategori
+        Jumlah Produk per Kategori
       </h2>
 
       <div style={{ marginBottom: '40px', maxWidth: '500px' }}>
         <Doughnut data={chartData} />
       </div>
 
-      <h2 style={{ color: '#6c3bb5', fontSize: '20px', marginBottom: '10px' }}>📦 Produk per Perusahaan</h2>
+      <h2 style={{ color: '#6c3bb5', fontSize: '20px', marginBottom: '10px' }}>Produk per Perusahaan</h2>
       <table className="custom-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
         <thead>
           <tr className="bg-[#5f259f] text-white font-semibold">
@@ -161,7 +161,7 @@ function StatisticsPage() {
         </tbody>
       </table>
 
-      <h2 style={{ color: '#6c3bb5', fontSize: '20px', marginBottom: '10px' }}>🏭 Pelaku Usaha per RPH</h2>
+      <h2 style={{ color: '#6c3bb5', fontSize: '20px', marginBottom: '10px' }}>Pelaku Usaha per RPH</h2>
       <table className="custom-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
         <thead>
           <tr className="bg-[#5f259f] text-white font-semibold">
