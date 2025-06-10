@@ -11,6 +11,7 @@ function Graph() {
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [raws, setRaws] = useState([]);
+  const [PKH_raws, setPKH_raws] = useState([]);
   const [selectedIngredient, setSelectedIngredient] = useState('');
   const [selectedPembina, setSelectedPembina] = useState('');
   const [productIngredientMap, setProductIngredientMap] = useState({});
@@ -35,6 +36,7 @@ function Graph() {
   const hasFetchedProducts = useRef(false);
   const hasFetchedCompanies = useRef(false);
   const hasFetchedProductDetail = useRef(false);
+  const hasFetchedPKH = useRef(false);
   const [batchProducts, setBatchProducts] =  useState([]);
   const hasFetchedBatchProduct = useRef(false);
   const [isDateFiltered, setIsDateFiltered] = useState(false);
@@ -88,6 +90,57 @@ function Graph() {
           console.error('Failed to fetch data:', error);
         }
       }
+    };
+
+    fetchData();
+  }, [token]);
+
+  useEffect(() => {
+    // console.log('Token:', token);
+    const fetchData = async () => {
+      if (token && !hasFetchedPKH.current) {
+        hasFetchedPKH.current = true;
+        setIsLoading(true);
+        try {
+          const response = await axios.get('http://202.10.41.89:4200/pkh-data');
+          const pkh_data = response.data.data.slice(0, 100);
+          const resultDict = {};
+          const companyMap = {}; 
+          
+          for (const product of pkh_data){
+            const extracted = [];
+
+            extracted.push(product.nama_perusahaan);
+
+            resultDict[product.nomor_sertifikat] = {
+              track: extracted,
+              nama_produk: product.nama_produk,
+              id_pembina: response.data.id_pembina,
+              id_perusahaan: product.nama_perusahaan,
+              jenis_perusahaan: "produk",
+              alamat_usaha: null,
+              provinsi: null,
+              kota: null,
+              dibuat_pada: product.tanggal_terbit,
+              ingredientTracks: null
+            };
+
+            companyMap[product.nama_perusahaan] = {  
+              _id: product.nama_perusahaan,
+              nama_perusahaan: product.nama_perusahaan,
+              jenis_usaha: "pelaku_usaha",
+              alamat_usaha: null,
+            };    
+          }
+          // setProducts(response.data.result.produkMaster);
+          setPKH_raws(resultDict);
+          setPerusahaanMap(prev => ({ ...prev, ...companyMap }));
+          // setIsLoading(false);
+        } catch (error) {
+          console.error('Failed to fetch data:', error);
+        }
+      }
+
     };
 
     fetchData();
@@ -229,7 +282,7 @@ function Graph() {
               nama_produk: product.nama_produk,
               id_pembina: product.id_pembina,
               id_perusahaan: product.id_perusahaan,
-              jenis_perusahaan: product.jenis_perusahaan,
+              jenis_perusahaan: "produk",
               alamat_usaha: product.alamat_usaha,
               provinsi: detectedProvince,
               kota: product.kota,
@@ -345,7 +398,7 @@ function Graph() {
             nama_produk: raws[product.id_halal].nama_produk,
             id_pembina: raws[product.id_halal].id_pembina,
             id_perusahaan: raws[product.id_halal].id_perusahaan,
-            jenis_perusahaan: raws[product.id_halal].jenis_perusahaan,
+            jenis_perusahaan: "produk",
             alamat_usaha: raws[product.id_halal].alamat_usaha,
             provinsi: detectedProvince,
             kota: raws[product.id_halal].kota,
@@ -424,7 +477,11 @@ function Graph() {
 
       if (!Array.isArray(chain) || chain.length === 0) continue;
 
-      const productData = (isDateFiltered ? batchRaws : raws)[productID];
+      const sourceData = {
+        ...(isDateFiltered ? batchRaws : raws),
+        ...PKH_raws
+      };
+      const productData = sourceData[productID];
       const source = chain[0]; 
       const rest = chain.slice(1);
 
@@ -597,7 +654,10 @@ function Graph() {
 
   const filteredRaws = useMemo(() => {
     const filtered = {};
-    const sourceData = isDateFiltered ? batchRaws : raws;
+    const sourceData = {
+      ...(isDateFiltered ? batchRaws : raws),
+      ...PKH_raws
+    };
 
     if (isDrilldownMode && drilldownNodeId) {
       const normalizedName = drilldownNodeId.replace('juru_sembelih_', '');
@@ -693,9 +753,11 @@ function Graph() {
   const layoutInitialized = useRef(false);
 
   useEffect(() => {
-    const els = generateElements(filteredRaws);
-    setElements(els);
-    setGraphKey(prev => prev + 1); // remount
+    if (!isLoading){
+      const els = generateElements(filteredRaws);
+      setElements(els);
+      setGraphKey(prev => prev + 1); // remount
+    }
   }, [filteredRaws]);
 
   useEffect(() => {
@@ -742,7 +804,11 @@ function Graph() {
           const node = event.target;
           const pos = node.renderedPosition();
           const nodeId = node.id();
-          const product = (isDateFiltered ? batchRaws : raws)[nodeId];
+          const sourceData = {
+            ...(isDateFiltered ? batchRaws : raws),
+            ...PKH_raws
+          };
+          const product = sourceData[nodeId];
           const product_ingredient = (isDateFiltered ? productIngredientMap_batchRaws : productIngredientMap)
           const company = perusahaanMap[nodeId];
           const isJuru = nodeId.startsWith('juru_sembelih_');
@@ -974,7 +1040,10 @@ function Graph() {
           disabled={isLoading}
           onClick={() =>
             generatePdfReport({
-              raws: isDateFiltered ? batchRaws : raws,
+              raws: {
+                ...(isDateFiltered ? batchRaws : raws),
+                ...PKH_raws 
+              },
               filteredRaws,
               productIngredientMap,
               perusahaanMap,
@@ -1007,7 +1076,10 @@ function Graph() {
           onClick={() => {
             const newWindow = window.open('', '_blank');
             const stateData = {
-              raws: isDateFiltered ? batchRaws : raws,
+              raws: {
+                ...(isDateFiltered ? batchRaws : raws),
+                ...PKH_raws 
+              },
               perusahaanMap,
               product_ingredient: isDateFiltered ? productIngredientMap_batchRaws : productIngredientMap,
               filteredRaws,
