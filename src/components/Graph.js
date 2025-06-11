@@ -773,6 +773,25 @@ function Graph() {
   
       try {
         layout.run();
+
+        layout.promiseOn('layoutstop').then(() => {
+          try {
+            // Zoom to 1.5× and center the graph
+            const nodes = cyInstance.nodes();
+            if (nodes.length > 30) {
+              const boundingBox = nodes.boundingBox();
+              cyInstance.animate({
+                zoom: 0.5,
+                center: { eles: nodes },
+              }, {
+                duration: 600,
+                easing: 'ease-in-out',
+              });
+            }
+          } catch (e) {
+            console.warn('Zoom error:', e.message);
+          }
+        });
       } catch (err) {
         console.warn('Layout run error:', err.message);
       }
@@ -815,7 +834,7 @@ function Graph() {
           const container = cy.container().getBoundingClientRect();
         
           const x = Math.min(pos.x + container.left, window.innerWidth - 300);
-          const y = Math.min(pos.y + container.top, window.innerHeight - 200);
+          const y = Math.min(pos.y + container.top + window.scrollY, window.innerHeight - 200);
         
           // First: remove all previous highlights
           cy.edges().removeClass('highlighted');
