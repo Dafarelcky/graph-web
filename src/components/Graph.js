@@ -5,6 +5,8 @@ import axios from 'axios';
 import { generatePdfReport } from './report';
 import { useNavigate } from 'react-router-dom';
 import GraphGuide from '../components/guide';
+import pLimit from 'p-limit';
+import { getFromCache, saveToCache } from './cache';
 
 function Graph() {
   const { token, userEmail } = useAuth();
@@ -210,7 +212,6 @@ function Graph() {
     fetchData();
   }, [token]);
   
-
   useEffect(() => {
     const fetchProductDetail = async () => {
       const resultDict = {};
@@ -226,13 +227,26 @@ function Graph() {
       if (!hasFetchedProductDetail.current && products.length > 0) {
         hasFetchedProductDetail.current = true;
         for (const product of products) {
+          let data;
           try {
-            const res = await axios.get(
-              `https://riset.its.ac.id/teratai-dev/api/v1/traceability/${product.id_halal}`,
-              { auth: { username, password } }
-            );
-    
-            const data = res.data.result;
+            const cachedData = await getFromCache(product.id_halal);
+
+            if (cachedData) {
+              // console.log(`[Cache HIT] Found data for ${product.id_halal}`);
+              data = cachedData;
+            } else {
+              // console.log(`[Cache MISS] Fetching ${product.id_halal} from network.`);
+              const res = await axios.get(
+                `https://riset.its.ac.id/teratai-dev/api/v1/traceability/${product.id_halal}`,
+                { auth: { username, password } }
+              );
+              
+              data = res.data.result;
+
+              await saveToCache(product.id_halal, data);
+            }
+
+            if (!data) continue;
             const extracted = [];
     
             // Loop through each key in the result object
@@ -310,6 +324,105 @@ function Graph() {
     }
   }, [products]);
 
+  // useEffect(() => {
+  //   const fetchProductDetail = async () => {
+  //     const resultDict = {};
+  //     const product_ingredient = {};
+  //     setIsLoading(true);
+
+  //     const extractProvince = (alamat) => {
+  //       if (!alamat) return null;
+  //       return INDONESIAN_PROVINCES.find((prov) =>
+  //         alamat.toLowerCase().includes(prov.toLowerCase())
+  //       ) || null;
+  //     };
+  //     if (!hasFetchedProductDetail.current && products.length > 0) {
+  //       hasFetchedProductDetail.current = true;
+  //       for (const product of products) {
+  //         try {
+  //           const res = await axios.get(
+  //             `https://riset.its.ac.id/teratai-dev/api/v1/traceability/${product.id_halal}`,
+  //             { auth: { username, password } }
+  //           );
+    
+  //           const data = res.data.result;
+  //           const extracted = [];
+    
+  //           // Loop through each key in the result object
+  //           for (const key in data) {
+  //             const item = data[key];
+  //             if (item?.nama_perusahaan) {
+  //               extracted.push(item.nama_perusahaan);
+  //             } else if (item?.juru_sembelih) {
+  //               extracted.push(item.juru_sembelih);
+  //             }
+  //           }
+    
+  //           // Store the array in the dictionary using id_halal as the key
+  //           const dataArray = Object.values(data);
+
+  //           const allBahan = dataArray[0]?.bahan?.map(b => b.nama_bahan).filter(Boolean);
+  //           if (allBahan?.length) {
+  //             product_ingredient[product.id_halal] = allBahan;
+  //           }
+
+  //           let combinedTrack = extracted;
+
+  //           const allIngredientTracks = {};
+
+  //           if (dataArray[0]?.bahan?.length > 1) {
+  //             for (const b of dataArray[0].bahan) {
+  //               try {
+  //                 const resBahan = await axios.get(
+  //                   `https://riset.its.ac.id/teratai-dev/api/v1/traceability/${b.id_halal}`,
+  //                   { auth: { username, password } }
+  //                 );
+  //                 const pathData = Object.values(resBahan.data.result)
+  //                   .map(x => x.nama_perusahaan || x.juru_sembelih)
+  //                   .filter(Boolean);
+  //                 allIngredientTracks[b.nama_bahan] = pathData;
+  //               } catch (err) {
+  //                 console.error('Error fetching ingredient trace:', err);
+  //               }
+  //             }
+  //             combinedTrack = extracted; // only keep main product's trace in default state
+  //           }
+
+  //           const detectedProvince = extractProvince(product.alamat_usaha);
+
+  //           resultDict[product.id_halal] = {
+  //             track: combinedTrack,
+  //             nama_produk: product.nama_produk,
+  //             id_pembina: product.id_pembina,
+  //             id_perusahaan: product.id_perusahaan,
+  //             jenis_perusahaan: "produk",
+  //             alamat_usaha: product.alamat_usaha,
+  //             provinsi: detectedProvince,
+  //             kota: product.kota,
+  //             dibuat_pada: product.dibuat_pada,
+  //             ingredientTracks: allIngredientTracks
+  //           };
+  //           // console.log(data)
+  //         } catch (error) {
+  //           console.error(`❌ Error fetching for ${product.id_halal}:`, error.response?.status || error.message);
+  //         }
+  //       }
+  //     }
+  //     setProductIngredientMap(product_ingredient);
+  //     // Object.entries(product_ingredient).forEach(([productID, ingredients]) => {
+  //     //   if (ingredients.length > 1) {
+  //     //     console.log(`📦 Product with multiple ingredients: ${productID}`, ingredients);
+  //     //   }
+  //     // });
+  //     setRaws(resultDict);
+  //     setIsLoading(false); 
+  //   };
+  
+  //   if (products.length > 0) {
+  //     fetchProductDetail();
+  //   }
+  // }, [products]);
+
   useEffect(() => {
     const fetchBatchData = async () => {
       if (!startDate && !endDate) {
@@ -345,13 +458,27 @@ function Graph() {
 
       // const result = {};
       for (const product of filtered) {
-        // if(!raws[product.id_halal]) continue;
+        let data;
         try {
-          const res = await axios.get(
-            `https://riset.its.ac.id/teratai-dev/api/v1/traceability/${product.id_halal}?batch=${product.id_batch}`,
-            { auth: { username, password } }
-          );
-          const data = res.data.result;
+          const cacheKey = `${product.id_halal}_batch_${product.id_batch}`;
+          const cachedData = await getFromCache(cacheKey);
+          
+          if (cachedData) {
+            // console.log(`[Cache HIT] Found data for ${product.id_halal}`);
+            data = cachedData;
+          } else {
+            // console.log(`[Cache MISS] Fetching ${product.id_halal} from network.`);
+            const res = await axios.get(
+              `https://riset.its.ac.id/teratai-dev/api/v1/traceability/${product.id_halal}?batch=${product.id_batch}`,
+              { auth: { username, password } }
+            );
+            
+            data = res.data.result;
+
+            await saveToCache(cacheKey, data);
+          }
+
+          if (!data) continue;
           const extracted = [];
 
           for (const key in data) {
@@ -797,6 +924,14 @@ function Graph() {
       }
     }
   }, [cyInstance, elements]);
+
+  useEffect(() => {
+    let timer;
+    if (isLoading) {
+      timer = setTimeout(() => setElements([]), 100);
+    }
+    return () => clearTimeout(timer);
+  }, [isLoading]);
 
   const exitDrilldownAnd = (callback) => {
     setIsDrilldownMode(false);
