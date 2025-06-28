@@ -56,16 +56,24 @@ function Graph() {
   }, [token]);
 
   const INDONESIAN_PROVINCES = [
-        "Aceh", "Sumatera Utara", "Sumatera Barat", "Riau", "Kepulauan Riau", "Jambi",
-        "Sumatera Selatan", "Bangka Belitung", "Bengkulu", "Lampung", "DKI Jakarta",
-        "Jawa Barat", "Banten", "Jawa Tengah", "DI Yogyakarta", "Jawa Timur", 
-        "Bali", "Nusa Tenggara Barat", "Nusa Tenggara Timur", "Kalimantan Barat",
-        "Kalimantan Tengah", "Kalimantan Selatan", "Kalimantan Timur", 
-        "Kalimantan Utara", "Sulawesi Utara", "Sulawesi Tengah", "Sulawesi Selatan", 
-        "Sulawesi Tenggara", "Gorontalo", "Sulawesi Barat", "Maluku", 
-        "Maluku Utara", "Papua", "Papua Barat", "Papua Tengah", "Papua Pegunungan",
-        "Papua Selatan", "Papua Barat Daya"
-      ];
+    "Aceh", "Sumatera Utara", "Sumatera Barat", "Riau", "Kepulauan Riau", "Jambi",
+    "Sumatera Selatan", "Bangka Belitung", "Bengkulu", "Lampung", "DKI Jakarta",
+    "Jawa Barat", "Banten", "Jawa Tengah", "DI Yogyakarta", "Jawa Timur", 
+    "Bali", "Nusa Tenggara Barat", "Nusa Tenggara Timur", "Kalimantan Barat",
+    "Kalimantan Tengah", "Kalimantan Selatan", "Kalimantan Timur", 
+    "Kalimantan Utara", "Sulawesi Utara", "Sulawesi Tengah", "Sulawesi Selatan", 
+    "Sulawesi Tenggara", "Gorontalo", "Sulawesi Barat", "Maluku", 
+    "Maluku Utara", "Papua", "Papua Barat", "Papua Tengah", "Papua Pegunungan",
+    "Papua Selatan", "Papua Barat Daya"
+  ];
+
+  const PEMBINA_NAME_ALIAS = {
+    "PKH ITS": "PSH ITS",
+    "Pusat Kajian Halal ITS": "PSH ITS",
+  };
+
+  const PEMBINA_ID_ALIAS = {};
+  const canonPshIdRef = useRef(null);
 
   const isDateInRange = (dateStr, start, end) => {
     const date = new Date(dateStr);
@@ -114,10 +122,16 @@ function Graph() {
 
             extracted.push(product.nama_perusahaan);
 
+            if (PEMBINA_ID_ALIAS[response.data.id_pembina])
+              response.data.id_pembina = PEMBINA_ID_ALIAS[response.data.id_pembina];
+
+            product.pembinaDisplay = response.data.id_pembina === canonPshIdRef.current ? "PSH ITS" : pembina.find(p => p._id === response.data.id_pembina)?.nama_perusahaan ?? "";
+
             resultDict[product.nomor_sertifikat] = {
               track: extracted,
               nama_produk: product.nama_produk,
               id_pembina: response.data.id_pembina,
+              nama_pembina: product.pembinaDisplay,
               id_perusahaan: product.nama_perusahaan,
               jenis_perusahaan: "produk",
               alamat_usaha: null,
@@ -131,6 +145,7 @@ function Graph() {
               _id: product.nama_perusahaan,
               nama_perusahaan: product.nama_perusahaan,
               jenis_usaha: "pelaku_usaha",
+              id_pembina: "66daf0e231b826e2a6629283",
               alamat_usaha: null,
             };    
           }
@@ -183,19 +198,26 @@ function Graph() {
   
           const allCompanies = response.data.result.perusahaan;
   
-          // ✅ Filter and map pembina companies
-          const pembinaCompanies = allCompanies
-            .filter(company => company.jenis_usaha?.toLowerCase() === 'pembina')
-            .map(company => ({
-              _id: company._id,
-              nama_perusahaan: company.nama_perusahaan,
-              jenis_usaha: company.jenis_usaha,
-            }));
+          const normalisedPembina = [];     
+          allCompanies
+            .filter(c => c.jenis_usaha?.toLowerCase() === "pembina")
+            .forEach(c => {
+              const canonicalName = PEMBINA_NAME_ALIAS[c.nama_perusahaan] || c.nama_perusahaan;
+
+              // ── capture the first ID we see as the canonical one ──
+              if (canonicalName === "PSH ITS" && !canonPshIdRef.current) canonPshIdRef.current = c._id;
+
+              // map every duplicate id → canonical id
+              if (canonicalName === "PSH ITS") PEMBINA_ID_ALIAS[c._id] = canonPshIdRef.current;
+
+              // push only one visible row per display-name
+              if (!normalisedPembina.some(p => p.nama_perusahaan === canonicalName)) {
+                normalisedPembina.push({ ...c, nama_perusahaan: canonicalName, _id: canonicalName === "PSH ITS" ? canonPshIdRef.current : c._id });
+              }
+            });
+          setPembina(normalisedPembina); 
   
-          console.log("📦 Pembina Companies:", pembinaCompanies);
-  
-          // Optional: store in state
-          setPembina(pembinaCompanies); // or use a new state like setPembinaPerusahaan if needed
+          console.log("📦 Pembina Companies:", normalisedPembina);
 
           const companyMap = {};
           allCompanies.forEach(c => {
@@ -232,10 +254,8 @@ function Graph() {
             const cachedData = await getFromCache(product.id_halal);
 
             if (cachedData) {
-              // console.log(`[Cache HIT] Found data for ${product.id_halal}`);
               data = cachedData;
             } else {
-              // console.log(`[Cache MISS] Fetching ${product.id_halal} from network.`);
               const res = await axios.get(
                 `https://riset.its.ac.id/teratai-dev/api/v1/traceability/${product.id_halal}`,
                 { auth: { username, password } }
@@ -291,10 +311,18 @@ function Graph() {
 
             const detectedProvince = extractProvince(product.alamat_usaha);
 
+            // just before you push productData
+            if (PEMBINA_ID_ALIAS[product.id_pembina])
+              product.id_pembina = PEMBINA_ID_ALIAS[product.id_pembina];
+
+            // always carry a display-ready name
+            product.pembinaDisplay = product.id_pembina === canonPshIdRef.current ? "PSH ITS" : pembina.find(p => p._id === product.id_pembina)?.nama_perusahaan ?? "";
+
             resultDict[product.id_halal] = {
               track: combinedTrack,
               nama_produk: product.nama_produk,
               id_pembina: product.id_pembina,
+              nama_pembina: product.pembinaDisplay,
               id_perusahaan: product.id_perusahaan,
               jenis_perusahaan: "produk",
               alamat_usaha: product.alamat_usaha,
@@ -464,10 +492,8 @@ function Graph() {
           const cachedData = await getFromCache(cacheKey);
           
           if (cachedData) {
-            // console.log(`[Cache HIT] Found data for ${product.id_halal}`);
             data = cachedData;
           } else {
-            // console.log(`[Cache MISS] Fetching ${product.id_halal} from network.`);
             const res = await axios.get(
               `https://riset.its.ac.id/teratai-dev/api/v1/traceability/${product.id_halal}?batch=${product.id_batch}`,
               { auth: { username, password } }
@@ -520,10 +546,18 @@ function Graph() {
 
           const detectedProvince = extractProvince(raws[product.id_halal].alamat_usaha);
 
+          // just before you push productData
+          if (PEMBINA_ID_ALIAS[raws[product.id_halal].id_pembina])
+            raws[product.id_halal].id_pembina = PEMBINA_ID_ALIAS[raws[product.id_halal].id_pembina];
+
+          // always carry a display-ready name
+          raws[product.id_halal].pembinaDisplay = raws[product.id_halal].id_pembina === canonPshIdRef.current ? "PSH ITS" : pembina.find(p => p._id === raws[product.id_halal].id_pembina)?.nama_perusahaan ?? "";
+
           resultDict[product.id_halal] = {
             track: combinedTrack,
             nama_produk: raws[product.id_halal].nama_produk,
             id_pembina: raws[product.id_halal].id_pembina,
+            nama_pembina: raws[product.id_halal].pembinaDisplay,
             id_perusahaan: raws[product.id_halal].id_perusahaan,
             jenis_perusahaan: "produk",
             alamat_usaha: raws[product.id_halal].alamat_usaha,
@@ -1051,7 +1085,14 @@ function Graph() {
               }
             });
           }
-        
+
+          if (company){
+            if (PEMBINA_ID_ALIAS[company.id_pembina])
+            company.id_pembina = PEMBINA_ID_ALIAS[company.id_pembina];
+
+            company.nama_pembina = company.id_pembina === canonPshIdRef.current ? "PSH ITS" : pembina.find(p => p._id === company.id_pembina)?.nama_perusahaan ?? "";
+          }
+
           // Show node popup
           setSelectedNode({
             id: node.id(),
@@ -1062,6 +1103,7 @@ function Graph() {
               ? {
                   jenis_perusahaan: product?.jenis_perusahaan || company?.jenis_usaha,
                   alamat_usaha: company?.alamat_usaha || null,
+                  pembina: product?.nama_pembina || company?.nama_pembina || null,
                   provinsi: product?.provinsi || null,
                   kota: product?.kota || null,
                   tanggal_diperbarui: product?.dibuat_pada || company?.dibuat_pada,
@@ -1708,6 +1750,9 @@ function Graph() {
               )}
               {selectedNode.extra.provinsi && (
                 <p><strong>Provinsi:</strong> {selectedNode.extra.provinsi}</p>
+              )}
+              {selectedNode.extra.pembina && (
+                <p><strong>Pembina:</strong> {selectedNode.extra.pembina}</p>
               )}
               {selectedNode.extra.kota && (
                 <p><strong>Kota:</strong> {selectedNode.extra.kota}</p>
