@@ -1192,8 +1192,8 @@ function Graph() {
           selector: 'edge.highlighted',
           style: {
             lineColor: '#FF4136',
-            targetArrowColor: '#FF4136',
-            targetArrowShape: 'triangle',
+            sourceArrowColor: '#FF4136',
+            sourceArrowShape: 'triangle',
             arrowScale: 2,
             width: 4,
             curveStyle: 'bezier',
