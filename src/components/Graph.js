@@ -671,6 +671,8 @@ function Graph() {
       elements.push({
         data: {
           id: `${productData.id_perusahaan}_${productID}`,
+          // source: productID,
+          // target: productData.id_perusahaan,
           source: productData.id_perusahaan,
           target: productID,
         },
@@ -707,6 +709,8 @@ function Graph() {
             elements.push({
               data: {
                 id: `${productID}_${ingredientNodeId}`,
+                // source: ingredientNodeId,
+                // target: productID,
                 source: productID,
                 target: ingredientNodeId,
               },
@@ -751,6 +755,8 @@ function Graph() {
             elements.push({
               data: {
                 id: `${prev}_${nodeId}`,
+                // source: nodeId,
+                // target: prev,
                 source: prev,
                 target: nodeId,
               },
@@ -780,6 +786,8 @@ function Graph() {
           elements.push({
             data: {
               id: `${prev}_${nodeId}`,
+              // source: nodeId,
+              // target: prev,
               source: prev,
               target: nodeId,
             },
@@ -843,7 +851,7 @@ function Graph() {
           )
           .map(([ingredientName]) => ingredientName);
 
-        // ⛔ Avoid false-positive full match: only show full product if drilldown is truly in main track
+        // Avoid false-positive full match: only show full product if drilldown is truly in main track
         const numIngredients = Object.keys(ingredientTracks).length;
 
         if (matchesMainTrack && numIngredients <= 1) {
@@ -930,6 +938,8 @@ function Graph() {
         animate: true,
         animationDuration: 500,
         animationEasing: 'ease-in-out',
+        // direction: 'UD',  // reverse horizontal
+        // roots: cyInstance.nodes().filter(n => cyInstance.edges(`[target = "${n.id()}"]`).length === 0),
       });
   
       try {
@@ -1145,12 +1155,12 @@ function Graph() {
           style: {
             width: 2,
             lineColor: '#999',
-            curveStyle: 'bezier', // 🧠 allow for curved arrows
-            targetArrowShape: 'triangle',
-            targetArrowColor: '#999',
-            arrowScale: 1.5, // 🆙 make arrows larger
+            curveStyle: 'bezier', 
+            sourceArrowShape: 'triangle',
+            sourceArrowColor: '#999',
+            arrowScale: 1.5, 
             midTargetArrowShape: 'none',
-            sourceArrowShape: 'none',
+            targetArrowShape: 'none',
           },
         },
         {
@@ -1194,10 +1204,10 @@ function Graph() {
   ), [elements, graphKey, raws, perusahaanMap, productIngredientMap, batchRaws]);  
 
   function applyCategoryFilter(ingredients) {
-      setSelectedIngredient(null); // reset sub-filter
-      setFilteredIngredientList([]); // force clear
+      setSelectedIngredient(null); 
+      setFilteredIngredientList([]);
       setTimeout(() => {
-        setFilteredIngredientList([...ingredients]); // set new list after event loop
+        setFilteredIngredientList([...ingredients]); 
       }, 0);
   }
 
@@ -1216,7 +1226,7 @@ function Graph() {
       alignItems: 'center', 
       marginBottom: '20px' 
     }}>
-      <div style={{ display: 'flex', gap: '12px' }}>
+      <div style={{ display: 'flex', gap: '6px' }}>
         <img
           src="/images/logo.png"
           alt="Logo"
@@ -1566,7 +1576,23 @@ function Graph() {
           ))}
         </select>
       </div>
-      <div style={{ marginBottom: '20px' }}>
+      <div style={{ 
+        marginBottom: '20px',
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '6px',
+       }}>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: '6px',
+            flex: 1,
+          }}
+        >
         <label 
           style={{
             fontWeight: '500',
@@ -1602,6 +1628,7 @@ function Graph() {
             fontSize: '14px'
           }}
         />
+        <div style={{ display: 'flex'}}>
         <button
           onClick={() => {
             if (pendingStartDate && pendingEndDate) {
@@ -1648,10 +1675,49 @@ function Graph() {
         >
           Hapus
         </button>
+        </div>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '10px 14px',
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            backgroundColor: '#f8f8ff',
+            fontSize: '13px',
+          }}
+        >
+          {[
+            { color: '#FF851B', label: 'Pelaku Usaha' },
+            { color: '#2ECC40', label: 'Produk' },
+            { color: '#0074D9', label: 'Distributor / RPH / Juru Sembelih' },
+            { color: '#FFD700', label: 'Bahan Baku' }
+          ].map((item, index) => (
+            <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '4px'}}>
+              <div style={{
+                width: '14px',
+                height: '14px',
+                borderRadius: item.label === 'Bahan Baku' ? '4px' : '50%',
+                backgroundColor: item.color,
+                flexShrink: 0
+              }} />
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div style={{ position: 'relative' }}>
+      
+      <div style={{ position: 'relative', marginTop: '20px' }}>
+        <div style={{ position: 'absolute', top: '-60px', right: '0', zIndex: 1000 }}>
+          
+        </div>
+
       {cytoscapeGraph}
+      
 
       {isLoading && (
         <div

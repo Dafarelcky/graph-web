@@ -41,7 +41,7 @@ export async function getFromCache(id) {
     });
   } catch (err) {
     console.error("CRITICAL: IndexedDB failed to open. Caching is disabled.", err);
-    alert("Warning: Caching is disabled because the database could not be opened. Check browser settings or private mode."); // An alert is hard to ignore
+    alert("Warning: Caching is disabled because the database could not be opened. Check browser settings or private mode."); 
     return null;
   }
 }
